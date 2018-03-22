@@ -1,0 +1,2 @@
+class ProxyScraperException(Exception):
+    pass
