@@ -2,6 +2,7 @@ import os
 import unittest
 from abc import ABC, abstractmethod
 
+from parsers.f1_news_team_points_parser import F1NewsTeamPointsParser
 from parsers.f1_news_testing_parser import F1NewsTestingParser
 from parsers.proxy_catalog_parser import ProxyCatalogParser
 
@@ -83,6 +84,23 @@ class TestF1NewsTestingParser(TestParser):
 
     def init_parser(self, html):
         return F1NewsTestingParser(html)
+
+
+class TestF1NewsTeamPointsParser(TestParser):
+    def test_points(self):
+        result = self._parser.points()
+        self.assertEqual(11, len(result))
+        self.assertEqual(('1', 'Mercedes', '765'), result[0])
+        self.assertEqual(('4', 'Force India', '173'), result[3])
+        self.assertEqual(('6', 'McLaren', '76'), result[5])
+        self.assertEqual(('11', 'Manor', '1'), result[10])
+
+    def get_response_file_path(self):
+        return 'responses/f1-news-team-points-2016.html'
+
+    def init_parser(self, html):
+        return F1NewsTeamPointsParser(html)
+
 
 
 if __name__ == '__main__':
