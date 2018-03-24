@@ -2,6 +2,7 @@ import os
 import unittest
 from abc import ABC, abstractmethod
 
+from parsers.f1_news_testing_parser import F1NewsTestingParser
 from parsers.proxy_catalog_parser import ProxyCatalogParser
 
 
@@ -45,6 +46,43 @@ class TestProxyCalalogParser(TestParser):
 
     def get_response_file_path(self):
         return 'responses/proxies_catalog_response.html'
+
+
+class TestF1NewsTestingParser(TestParser):
+    def test_dates(self):
+        self.assertEqual(['28 февраля', '27 февраля'], self._parser.dates())
+
+    def test_results(self):
+        results = self._parser.results()
+        self.assertEqual(2, len(results))
+        self.assertEqual(11, len(results[0]))
+        self.assertEqual(11, len(results[1]))
+        self.assertEqual('1', results[0][0][0])
+        self.assertEqual('Райкконен', results[0][0][1])
+        self.assertEqual('Ferrari', results[0][0][2])
+        self.assertEqual('1.20.960', results[0][0][3])
+        self.assertEqual('108', results[0][0][4])
+        self.assertEqual('Soft', results[0][0][5])
+
+        self.assertEqual('1', results[1][0][0])
+        self.assertEqual('Хэмилтон', results[1][0][1])
+        self.assertEqual('Mercedes', results[1][0][2])
+        self.assertEqual('1.21.765', results[1][0][3])
+        self.assertEqual('73', results[1][0][4])
+        self.assertEqual('Soft', results[1][0][5])
+
+        self.assertEqual('11', results[1][-1][0])
+        self.assertEqual('Эриксон', results[1][-1][1])
+        self.assertEqual('Sauber', results[1][-1][2])
+        self.assertEqual('1.26.841', results[1][-1][3])
+        self.assertEqual('72', results[1][-1][4])
+        self.assertEqual('Medium', results[1][-1][5])
+
+    def get_response_file_path(self):
+        return 'responses/f1-news-testing-2017.html'
+
+    def init_parser(self, html):
+        return F1NewsTestingParser(html)
 
 
 if __name__ == '__main__':
