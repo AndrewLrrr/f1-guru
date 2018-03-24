@@ -2,6 +2,7 @@ import os
 import unittest
 from abc import ABC, abstractmethod
 
+from parsers.f1_news_race_calatog_parser import F1NewsRaceCatalogParser
 from parsers.f1_news_team_points_parser import F1NewsTeamPointsParser
 from parsers.f1_news_testing_parser import F1NewsTestingParser
 from parsers.proxy_catalog_parser import ProxyCatalogParser
@@ -101,6 +102,65 @@ class TestF1NewsTeamPointsParser(TestParser):
     def init_parser(self, html):
         return F1NewsTeamPointsParser(html)
 
+
+class TestF1NewsRaceCatalog(TestParser):
+    def test_links(self):
+        expected = (
+            'https://f1news.ru/Championship/2016/australia/race.shtml',
+            'https://f1news.ru/Championship/2016/bahrain/race.shtml',
+            'https://f1news.ru/Championship/2016/china/race.shtml',
+            'https://f1news.ru/Championship/2016/russia/race.shtml',
+            'https://f1news.ru/Championship/2016/spain/race.shtml',
+            'https://f1news.ru/Championship/2016/monaco/race.shtml',
+            'https://f1news.ru/Championship/2016/canada/race.shtml',
+            'https://f1news.ru/Championship/2016/europe/race.shtml',
+            'https://f1news.ru/Championship/2016/austria/race.shtml',
+            'https://f1news.ru/Championship/2016/britain/race.shtml',
+            'https://f1news.ru/Championship/2016/hungary/race.shtml',
+            'https://f1news.ru/Championship/2016/germany/race.shtml',
+            'https://f1news.ru/Championship/2016/belgium/race.shtml',
+            'https://f1news.ru/Championship/2016/italy/race.shtml',
+            'https://f1news.ru/Championship/2016/singapore/race.shtml',
+            'https://f1news.ru/Championship/2016/malaysia/race.shtml',
+            'https://f1news.ru/Championship/2016/japan/race.shtml',
+            'https://f1news.ru/Championship/2016/usa/race.shtml',
+            'https://f1news.ru/Championship/2016/mexico/race.shtml',
+            'https://f1news.ru/Championship/2016/brazil/race.shtml',
+            'https://f1news.ru/Championship/2016/abudhabi/race.shtml',
+        )
+        self.assertEqual(expected, self._parser.links())
+
+    def test_tracks(self):
+        expected = (
+            'Мельбурн',
+            'Сахир',
+            'Шанхай',
+            'Сочи',
+            'Барселона',
+            'Монте-Карло',
+            'Монреаль',
+            'Баку',
+            'Шпильберг',
+            'Сильверстоун',
+            'Будапешт',
+            'Хоккенхайм',
+            'Спа',
+            'Монца',
+            'Сингапур',
+            'Сепанг',
+            'Сузука',
+            'Остин',
+            'Мехико',
+            'Сан-Паулу',
+            'Яс-Марина',
+        )
+        self.assertEqual(expected, self._parser.tracks())
+
+    def get_response_file_path(self):
+        return 'responses/f1-news-race-catalog-2016.html'
+
+    def init_parser(self, html):
+        return F1NewsRaceCatalogParser(html)
 
 
 if __name__ == '__main__':
