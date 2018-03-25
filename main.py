@@ -18,24 +18,68 @@ SCRAPERS = {
 
 YEARS_PERIOD = (2014, 2015, 2016, 2017, 2018,)
 
+TEAMS_MAPPING = {
+    'Mercedes': 'Mercedes',
+    'Ferrari': 'Ferrari',
+    'Williams': 'Williams',
+    'Haas F1': 'Haas',
+    'Haas': 'Haas',
+    'Red Bull Racing': 'Red Bull',
+    'Red Bull': 'Red Bull',
+    'Force India': 'Force India',
+    'Toro Rosso': 'Toro Rosso',
+    'Renault': 'Toro Rosso',
+    'McLaren': 'McLaren',
+    'Sauber': 'Sauber',
+    'Lotus': 'Lotus',
+    'Manor F1 Team': 'Manor',
+    'Marussia': 'Marussia',
+    'Caterham': 'Caterham',
+}
+
 # Дополнительные данные будем записывать в формате:
-# Двигатель, Руководитель, Тех.директор, Бюджет, Заводской статус
+# Двигатель, Руководитель, Тех.директор, Бюджет (в млн евро), Заводской статус
 TEAMS_ADDITIONAL_DATA = {
     2014: (
-        ('Mercedes',),
-        ('Ferrari',),
-        ('Williams',),
-        ('Force India',),
-        ('Toro Rosso',),
-        ('Renault',),
-        ('McLaren',),
-        ('Sauber',),
-        ('Haas',)
+        ('Mercedes', 'Mercedes', 'Тото Вольфф', 'Падди Лоу', 300, 1),
+        ('Ferrari', 'Ferrari', 'Марко Маттиаччи', 'Джеймс Эллисон', 410, 1),
+        ('Red Bull', 'Renault', 'Кристиан Хорнер', 'Эдриан Ньюи', 425, 1),
+        ('Williams', 'Mercedes', 'Клэр Уильямс', 'Пэт Симондс', 150, 0),
+        ('Force India', 'Mercedes', 'Роберт Фернли', 'Энди Грин', 75, 0),
+        ('Toro Rosso', 'Renault', 'Франц Тост', 'Джеймс Ки', 80, 0),
+        ('Lotus', 'Renault', 'Жерар Лопес', 'Ник Честер', 160, 0),
+        ('McLaren', 'Mercedes', 'Эрик Булье', 'Тим Госс', 230, 0),
+        ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Эрик Ганделин', 85, 0),
+        ('Marussia', 'Ferrari', 'Джон Бут', 'Джон МакКиллиам', 60, 0),
+        ('Caterham', 'Renault', 'Сирил Абитебул', 'Марк Смит', 70, 0),
     ),
-    2015: {},
-    2016: {},
-    2017: {},
-    2018: {},
+    2015: (
+        ('Mercedes', 'Mercedes', 'Тото Вольфф', 'Падди Лоу', 230 * 1.35, 1),
+        ('Ferrari', 'Ferrari', 'Маурицио Арривабене', 'Джеймс Эллисон', 225 * 1.35, 1),
+        ('Red Bull', 'Renault', 'Кристиан Хорнер', 'Эдриан Ньюи', 200 * 1.35, 1),
+        ('Williams', 'Mercedes', 'Клэр Уильямс', 'Пэт Симондс', 110 * 1.35, 0),
+        ('Force India', 'Mercedes', 'Роберт Фернли', 'Энди Грин', 110 * 1.35, 0),
+        ('Toro Rosso', 'Renault', 'Франц Тост', 'Джеймс Ки', 90 * 1.35, 0),
+        ('Lotus', 'Renault', 'Жерар Лопес', 'Ник Честер', 100 * 1.35, 0),
+        ('McLaren', 'Honda', 'Эрик Булье', 'Тим Госс', 180 * 1.35, 1),
+        ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Эрик Ганделин', 90 * 1.35, 0),
+        ('Manor', 'Ferrari', 'Джон Бут', 'Джон МакКиллиам', 60 * 1.35, 0),
+    ),
+    2016: (
+        ('Mercedes', 'Mercedes', 'Тото Вольфф', 'Падди Лоу', 265 * 1.20, 1),
+        ('Ferrari', 'Ferrari', 'Маурицио Арривабене', 'Джеймс Эллисон', 330 * 1.20, 1),
+        ('Red Bull', 'Renault', 'Кристиан Хорнер', 'Эдриан Ньюи', 215 * 1.20, 0),
+        ('Williams', 'Mercedes', 'Клэр Уильямс', 'Пэт Симондс', 105 * 1.20, 0),
+        ('Force India', 'Mercedes', 'Роберт Фернли', 'Энди Грин', 90 * 1.20, 0),
+        ('Toro Rosso', 'Renault', 'Франц Тост', 'Джеймс Ки', 100 * 1.20, 0),
+        ('Renault', 'Renault', 'Сирил Абитебул', 'Ник Честер', 150 * 1.20, 1),
+        ('McLaren', 'Honda', 'Эрик Булье', 'Тим Госс', 185 * 1.20, 1),
+        ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Эрик Ганделин', 95 * 1.20, 0),
+        ('Manor', 'Ferrari', 'Дэйв Райан', 'Джон МакКиллиам', 85 * 1.20, 0),
+        ('Haas	', 'Ferrari', 'Гюнтер Штайнер', 'Роб Тэйлор', 100 * 1.20, 0),
+    ),
+    2017: (),
+    2018: (),
 }
 
 TESTING_URI = {
@@ -91,7 +135,8 @@ TEAM_POINTS_URI = {
     }
 }
 
-TESTING_RESULTS_HEADERS = ('position', 'team', 'time', 'laps', 'tyres', 'day')
+TESTING_RESULTS_HEADERS = ('position', 'team', 'time', 'total_laps', 'tyre_type', 'day')
+TEAMS_DATA_HEADERS = ('team', 'engine', 'team_leader', 'technical_director', 'budget', 'is_factory_team')
 TEAM_POINTS_HEADERS = ('position', 'team', 'points')
 
 
@@ -128,7 +173,7 @@ def get_testing_results(year, source='f1news.ru'):
                 result.append(day)
                 full_results.append((
                     result[0],
-                    result[2],
+                    TEAMS_MAPPING[result[2]],
                     result[3],
                     result[4],
                     result[5],
@@ -154,14 +199,16 @@ def get_team_points(year, source='f1news.ru'):
 
 def build_testing_data_sets(year):
     results_df = pd.DataFrame(get_testing_results(year), columns=TESTING_RESULTS_HEADERS)
+    team_data_df = pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
     results_df['year'] = year
+    results_df = results_df.merge(team_data_df, on='team').sort_values(['day', 'time'])
     if year != 2018:
         points_df = pd.DataFrame(get_team_points(year), columns=TEAM_POINTS_HEADERS)[['team', 'points']]
         scaler = MinMaxScaler()
         points_df['points'] = pd.DataFrame(
             scaler.fit_transform(points_df['points'].astype(float).values.reshape(-1, 1))
         )
-        results_df = results_df.merge(points_df).sort_values(['day', 'time', 'points'])
+        results_df = results_df.merge(points_df, on='team').sort_values(['day', 'time', 'points'])
         results_df.rename(columns={'points': 'strength'}, inplace=True)
     print(results_df.team.unique())
     print(results_df)
@@ -177,7 +224,7 @@ def save_as_csv(data, path):
 
 
 def main():
-    build_testing_data_sets(2017)
+    build_testing_data_sets(2014)
     # logger.info('Start building data set')
     #
     # mode = sys.argv.get(1)

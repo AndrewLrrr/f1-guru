@@ -12,7 +12,7 @@ class Cacher:
     def __init__(self, prefix=''):
         if prefix and not prefix.startswith('/'):
             prefix = '/' + prefix
-        self._directory_path = os.path.join(STORAGE_PATH, 'cache') + os.path.realpath(prefix)
+        self._directory_path = os.path.join(STORAGE_PATH, 'cache', prefix)
 
     def put(self, key, value):
         try:
