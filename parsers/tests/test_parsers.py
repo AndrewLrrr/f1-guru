@@ -57,7 +57,7 @@ class TestF1NewsTestingParser(TestParser):
 
     def test_results(self):
         expected = [
-            (
+            [
                 ['1', 'Райкконен', 'Ferrari', '1.20.960', '108', 'Soft'],
                 ['2', 'Хэмилтон', 'Mercedes', '1.20.983', '66', 'SuperSoft'],
                 ['3', 'Ферстаппен', 'Red Bull Racing', '1.22.200', '89', 'Soft'],
@@ -68,8 +68,8 @@ class TestF1NewsTestingParser(TestParser):
                 ['8', 'Палмер', 'Renault', '1.24.139', '53', 'Soft'],
                 ['9', 'Джовинацци', 'Sauber', '1.24.617', '67', 'Soft'],
                 ['10', 'Вандорн', 'McLaren', '1.25.600', '40', 'Soft'],
-                ['11', 'Стролл', 'Williams', '1.26.040', '12', 'Medium']),
-            (
+                ['11', 'Стролл', 'Williams', '1.26.040', '12', 'Medium']],
+            [
                 ['1', 'Хэмилтон', 'Mercedes', '1.21.765', '73', 'Soft'],
                 ['2', 'Феттель', 'Ferrari', '1.21.878', '128', 'Medium'],
                 ['3', 'Масса', 'Williams', '1.22.076', '103', 'Soft'],
@@ -81,7 +81,7 @@ class TestF1NewsTestingParser(TestParser):
                 ['9', 'Хюлкенберг', 'Renault', '1.24.784', '57', 'Medium'],
                 ['10', 'Алонсо', 'McLaren', '1.24.852', '29', 'Soft'],
                 ['11', 'Эриксон', 'Sauber', '1.26.841', '72', 'Medium']
-             )
+             ]
         ]
         self.assertEqual(expected, self._parser.results())
 

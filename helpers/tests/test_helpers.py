@@ -1,6 +1,6 @@
 import unittest
 
-from helpers.helpers import add_milliseconds_to_time
+from helpers.helpers import add_milliseconds_to_time, join_sequences
 
 
 class TestHelpers(unittest.TestCase):

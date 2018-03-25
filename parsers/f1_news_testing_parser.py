@@ -50,7 +50,7 @@ class F1NewsTestingParser(Parser):
                 result.append(line)
             if need_correct_lap_time:
                 result = self._normalize_lap_times(result)
-            results.append(tuple(result))
+            results.append(result)
         return results
 
     @staticmethod

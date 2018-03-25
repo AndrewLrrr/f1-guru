@@ -13,11 +13,11 @@ class TestScraper(unittest.TestCase):
 
         with requests_mock.mock() as m:
             try:
-                s.scrape(path='path')
+                s.scrape(uri='path')
             except requests_mock.exceptions.NoMockAddress:
                 pass
             m.get(s.get_full_url(), text='test content')
-            self.assertEqual('test content', s.scrape(path='path'))
+            self.assertEqual('test content', s.scrape(uri='path'))
             self.assertEqual('http://test.com:8080/path', s.get_full_url())
 
     def test_can_correctly_do_scrape_with_params(self):
@@ -26,11 +26,11 @@ class TestScraper(unittest.TestCase):
 
         with requests_mock.mock() as m:
             try:
-                s.scrape(path='path', params=params)
+                s.scrape(uri='path', params=params)
             except requests_mock.exceptions.NoMockAddress:
                 pass
             m.get(s.get_full_url(), text='test content')
-            self.assertEqual('test content', s.scrape(path='path', params=params))
+            self.assertEqual('test content', s.scrape(uri='path', params=params))
             self.assertRegex(s.get_full_url(), r'http://test.com:8080/path\?(?:q=query&page=1|page=1&q=query)')
 
     def test_can_correctly_do_scrape_with_incorrect_host(self):
@@ -39,11 +39,11 @@ class TestScraper(unittest.TestCase):
 
         with requests_mock.mock() as m:
             try:
-                s.scrape(path='path', params=params)
+                s.scrape(uri='path', params=params)
             except requests_mock.exceptions.NoMockAddress:
                 pass
             m.get(s.get_full_url(), text='test content')
-            self.assertEqual('test content', s.scrape(path='path', params=params))
+            self.assertEqual('test content', s.scrape(uri='path', params=params))
             self.assertRegex(s.get_full_url(), r'https://test.com/path\?(?:q=query&page=1|page=1&q=query)')
 
     def test_can_correctly_do_scrape_with_extra_slashes(self):
@@ -52,11 +52,11 @@ class TestScraper(unittest.TestCase):
 
         with requests_mock.mock() as m:
             try:
-                s.scrape(path='/path/', params=params)
+                s.scrape(uri='/path/', params=params)
             except requests_mock.exceptions.NoMockAddress:
                 pass
             m.get(s.get_full_url(), text='test content')
-            self.assertEqual('test content', s.scrape(path='/path/', params=params))
+            self.assertEqual('test content', s.scrape(uri='/path/', params=params))
             self.assertRegex(s.get_full_url(), r'https://test.com/path\?(?:q=query&page=1|page=1&q=query)')
 
     def test_raise_exception_if_incorrect_protocol(self):

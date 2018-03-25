@@ -23,8 +23,8 @@ class Scraper(Request):
         if self._protocol not in ('http', 'https',):
             raise ValueError('Unsupported protocol `{}`. You must use `http` or `https` only'.format(protocol))
 
-    def scrape(self, path, *, params=None, headers=None):
-        self._path = re.sub(r'^/?(.*?)/?$', r'\1', path.lower().strip())
+    def scrape(self, uri, *, params=None, headers=None):
+        self._path = re.sub(r'^/?(.*?)/?$', r'\1', uri.lower().strip())
         secure = self._protocol == 'https'
         return self.get(params=params, headers=headers, secure=secure)
 
@@ -43,20 +43,20 @@ class ProxyScraper:
         self._retries = retries
         self._scraper = Scraper(host, protocol=protocol, port=port, timeout=timeout)
 
-    def scrape(self, path='', *, params=None, headers=None):
+    def scrape(self, uri='', *, params=None, headers=None):
         if self._proxy is None:
             self._proxy = self._proxy_manager.get_proxy()
             if not self._proxy:
                 raise ProxyScraperException('Proxy not found')
             self._scraper.proxy = self._proxy
         try:
-            return self._scraper.scrape(path, params=params, headers=headers)
+            return self._scraper.scrape(uri, params=params, headers=headers)
         except (requests.ConnectionError, requests.ReadTimeout) as e:
             if self._retries == 0:
                 raise ProxyScraperException('Ended attempts to proxy reconnect. Reason `{}`'.format(e))
             self._proxy_manager.forget_proxy(self._proxy)
             self._retries -= 1
             self._proxy = None
-            return self.scrape(path, params=params, headers=headers)
+            return self.scrape(uri, params=params, headers=headers)
         except Exception as e:
             ProxyScraperException(e)
