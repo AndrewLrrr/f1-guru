@@ -1,8 +1,11 @@
 import logging
+import os
 
 import pandas as pd
+import sys
 from sklearn.preprocessing import MinMaxScaler
 
+import settings
 from decorators import decorators
 from helpers.scraper import Scraper
 from parsers.f1_news_team_points_parser import F1NewsTeamPointsParser
@@ -32,13 +35,13 @@ TEAMS_MAPPING = {
     'McLaren': 'McLaren',
     'Sauber': 'Sauber',
     'Lotus': 'Lotus',
-    'Manor F1 Team': 'Manor',
+    'Manor': 'Manor',
     'Marussia': 'Marussia',
     'Caterham': 'Caterham',
 }
 
 # Дополнительные данные будем записывать в формате:
-# Двигатель, Руководитель, Тех.директор, Бюджет (в млн евро), Заводской статус
+# Двигатель, Руководитель, Тех.директор, Бюджет (в млн евро), Официальная поддержка от моториста
 TEAMS_ADDITIONAL_DATA = {
     2014: (
         ('Mercedes', 'Mercedes', 'Тото Вольфф', 'Падди Лоу', 300, 1),
@@ -76,10 +79,32 @@ TEAMS_ADDITIONAL_DATA = {
         ('McLaren', 'Honda', 'Эрик Булье', 'Тим Госс', 185 * 1.20, 1),
         ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Эрик Ганделин', 95 * 1.20, 0),
         ('Manor', 'Ferrari', 'Дэйв Райан', 'Джон МакКиллиам', 85 * 1.20, 0),
-        ('Haas	', 'Ferrari', 'Гюнтер Штайнер', 'Роб Тэйлор', 100 * 1.20, 0),
+        ('Haas', 'Ferrari', 'Гюнтер Штайнер', 'Роб Тэйлор', 100 * 1.20, 0),
     ),
-    2017: (),
-    2018: (),
+    2017: (
+        ('Mercedes', 'Mercedes', 'Тото Вольфф', 'Джеймс Эллисон', 310, 1),
+        ('Ferrari', 'Ferrari', 'Маурицио Арривабене', 'Маттиа Бинотто', 260, 1),
+        ('Red Bull', 'Renault', 'Кристиан Хорнер', 'Эдриан Ньюи', 250, 0),
+        ('Williams', 'Mercedes', 'Клэр Уильямс', 'Падди Лоу', 120, 0),
+        ('Force India', 'Mercedes', 'Роберт Фернли', 'Энди Грин', 109, 0),
+        ('Toro Rosso', 'Renault', 'Франц Тост', 'Джеймс Ки', 115, 0),
+        ('Renault', 'Renault', 'Сирил Абитебул', 'Ник Честер', 172, 1),
+        ('McLaren', 'Honda', 'Эрик Булье', 'Тим Госс', 212, 1),
+        ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Йорг Цандер', 109, 0),
+        ('Haas', 'Ferrari', 'Гюнтер Штайнер', 'Роб Тэйлор', 115, 0),
+    ),
+    2018: (
+        ('Mercedes', 'Mercedes', 'Тото Вольфф', 'Джеймс Эллисон', 450, 1),
+        ('Ferrari', 'Ferrari', 'Маурицио Арривабене', 'Маттиа Бинотто', 430, 1),
+        ('Red Bull', 'Renault', 'Кристиан Хорнер', 'Эдриан Ньюи', 350, 0),
+        ('Williams', 'Mercedes', 'Клэр Уильямс', 'Падди Лоу', 135, 0),
+        ('Force India', 'Mercedes', 'Роберт Фернли', 'Энди Грин', 110, 0),
+        ('Toro Rosso', 'Honda', 'Франц Тост', 'Джеймс Ки', 125, 1),
+        ('Renault', 'Renault', 'Сирил Абитебул', 'Ник Честер', 200, 0),
+        ('McLaren', 'Renault', 'Эрик Булье', 'Тим Госс', 250, 1),
+        ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Йорг Цандер', 135, 0),
+        ('Haas', 'Ferrari', 'Гюнтер Штайнер', 'Роб Тэйлор', 110, 0),
+    ),
 }
 
 TESTING_URI = {
@@ -135,7 +160,7 @@ TEAM_POINTS_URI = {
     }
 }
 
-TESTING_RESULTS_HEADERS = ('position', 'team', 'time', 'total_laps', 'tyre_type', 'day')
+TESTING_RESULTS_HEADERS = ('position', 'team', 'time', 'laps', 'tyre_type', 'day', 'track')
 TEAMS_DATA_HEADERS = ('team', 'engine', 'team_leader', 'technical_director', 'budget', 'is_factory_team')
 TEAM_POINTS_HEADERS = ('position', 'team', 'points')
 
@@ -153,7 +178,11 @@ def join_laps(results):
     for idx1, r1 in enumerate(results):
         for idx2, r2 in enumerate(results):
             if r1[1] != r2[1] and r1[2] == r2[2] and idx1 not in extra_rows:
-                r1[4] = int(r1[4]) + int(r2[4])
+                try:
+                    r1[4] = int(r1[4]) + int(r2[4])
+                except ValueError:
+                    print(r1)
+                    print(r2)
                 extra_rows.append(idx2)
     for extra_row in sorted(extra_rows, reverse=True):
         del results[extra_row]
@@ -166,6 +195,7 @@ def get_testing_results(year, source='f1news.ru'):
     for uri in TESTING_URI[source][year]:
         data = scrape_data(source, uri)
         parser = F1NewsTestingParser(data)
+        track = parser.track()
         all_results = parser.results()
         for results in reversed(all_results):
             results = join_laps(results)
@@ -177,17 +207,18 @@ def get_testing_results(year, source='f1news.ru'):
                     result[3],
                     result[4],
                     result[5],
-                    day
+                    day,
+                    track,
                 ))
             day += 1
     return full_results
 
 
-def get_race_results(year):
+def get_race_results(year, source='f1news.ru'):
     pass
 
 
-def get_race_results_by_race_number(year, num):
+def get_race_results_by_race_number(year, num, source='f1news.ru'):
     pass
 
 
@@ -210,8 +241,6 @@ def build_testing_data_sets(year):
         )
         results_df = results_df.merge(points_df, on='team').sort_values(['day', 'time', 'points'])
         results_df.rename(columns={'points': 'strength'}, inplace=True)
-    print(results_df.team.unique())
-    print(results_df)
     return results_df
 
 
@@ -219,25 +248,36 @@ def build_racing_data_sets(year=None):
     return []
 
 
-def save_as_csv(data, path):
-    pass
+def save_data_frame_as_csv(df, path):
+    path = '{}.csv'.format(path) if not path.endswith('csv') else path
+    full_path = os.path.join(settings.STORAGE_PATH, path)
+    df.to_csv(full_path, encoding='utf-8')
 
 
 def main():
-    build_testing_data_sets(2014)
-    # logger.info('Start building data set')
-    #
-    # mode = sys.argv.get(1)
-    # year = sys.argv.get(2)
-    #
-    # if mode == 'testing':  # Make testing data set
-    #     data = build_testing_data_sets(year)
-    # elif mode == 'racing':  # Make racing data set
-    #     data = build_racing_data_sets(year)
-    # else:
-    #     raise ValueError('Unsupported data set type `{}`'.format(mode))
-    #
-    # logger.info('Finish building data set')
+    logger.info('Start building data set...')
+
+    mode = sys.argv[1]
+
+    if mode == 'testing':  # Make testing data set
+        test_df = None
+        train_df = None
+        for year in YEARS_PERIOD:
+            if year == 2018:
+                test_df = build_testing_data_sets(year)
+            else:
+                if train_df is None:
+                    train_df = build_testing_data_sets(year)
+                else:
+                    train_df = pd.concat([train_df, build_testing_data_sets(year)])
+        save_data_frame_as_csv(test_df, 'test-testing-2018')
+        save_data_frame_as_csv(train_df, 'train-testing-2014-2017')
+    elif mode == 'racing':  # Make racing data set
+        data = build_racing_data_sets()
+    else:
+        raise ValueError('Unsupported data set type `{}`'.format(mode))
+
+    logger.info('Finish building data set')
 
 
 if __name__ == '__main__':

@@ -55,6 +55,9 @@ class TestF1NewsTestingParser(TestParser):
     def test_dates(self):
         self.assertEqual(['28 февраля', '27 февраля'], self._parser.dates())
 
+    def test_track(self):
+        self.assertEqual('Барселона', self._parser.track())
+
     def test_results(self):
         expected = [
             [

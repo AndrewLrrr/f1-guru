@@ -1,6 +1,7 @@
 import os
 import pickle
 import errno
+import re
 import shutil
 
 from settings import STORAGE_PATH
@@ -10,8 +11,9 @@ class Cacher:
     _protocol = 2
 
     def __init__(self, prefix=''):
-        if prefix and not prefix.startswith('/'):
-            prefix = '/' + prefix
+        prefix = re.sub('([\w-]+)', '\1', prefix)
+        if not prefix:
+            raise ValueError('Incorrect prefix key')
         self._directory_path = os.path.join(STORAGE_PATH, 'cache', prefix)
 
     def put(self, key, value):

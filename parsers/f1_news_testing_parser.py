@@ -9,12 +9,16 @@ TABLE_TYPES_MAPPING = {
     2: (0, 1, 2, 4, 5),
     3: (0, 1, 2, 3, 4),
     4: (0, 1, 2, 4, None),
+    5: (0, 1, 2, 5, 4),
 }
 
 
 class F1NewsTestingParser(Parser):
     def dates(self):
         return [t.text for t in self._soup.find_all('h3') if re.match('^\d', t.text)]
+
+    def track(self):
+        return self._soup.find('h1').text.split('.')[-1].strip()
 
     def results(self):
         tables = self._soup.find_all('table', {'class': 'f1Table'})
@@ -30,6 +34,8 @@ class F1NewsTestingParser(Parser):
                 mapping = TABLE_TYPES_MAPPING[3]
             elif len(headers) == 5:
                 mapping = TABLE_TYPES_MAPPING[4]
+            elif len(headers) == 6 and headers[4] == 'Шины':
+                mapping = TABLE_TYPES_MAPPING[5]
             else:
                 mapping = TABLE_TYPES_MAPPING[2]
 
@@ -41,7 +47,7 @@ class F1NewsTestingParser(Parser):
                 for i in mapping:
                     if i is not None:
                         if i == 0:
-                            pos, _, racer = row[i].text.split('.')
+                            pos, _, racer = [i.strip() for i in row[i].text.split('.') if i]
                             line.extend([pos, racer])
                         else:
                             line.append(self._normalize(row[i].text))
