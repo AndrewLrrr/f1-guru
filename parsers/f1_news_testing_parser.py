@@ -3,14 +3,8 @@ import re
 from helpers.helpers import add_milliseconds_to_time
 from parsers.parser import Parser
 
-# Указываем по какому индексу брать нужные данные из иаблицы
-TABLE_TYPES_MAPPING = {
-    1: (0, 1, 3, 5, None),
-    2: (0, 1, 2, 4, 5),
-    3: (0, 1, 2, 3, 4),
-    4: (0, 1, 2, 4, None),
-    5: (0, 1, 2, 5, 4),
-}
+
+COLUMNS = ('пилот|гонщик', 'команда', 'время', 'круги', 'шины',)
 
 
 class F1NewsTestingParser(Parser):
@@ -26,18 +20,23 @@ class F1NewsTestingParser(Parser):
         for table in tables:
             headers = [td.text for td in table.find('tr', {'class': 'firstLine'}).find_all('td')]
             need_correct_lap_time = False
+            mapping = []
 
-            if len(headers) == 6 and 'Мотор' in headers:
-                mapping = TABLE_TYPES_MAPPING[1]
-            elif len(headers) == 5 and 'Шины' in headers:
-                need_correct_lap_time = True
-                mapping = TABLE_TYPES_MAPPING[3]
-            elif len(headers) == 5:
-                mapping = TABLE_TYPES_MAPPING[4]
-            elif len(headers) == 6 and headers[4] == 'Шины':
-                mapping = TABLE_TYPES_MAPPING[5]
-            else:
-                mapping = TABLE_TYPES_MAPPING[2]
+            # Указываем по какому индексу брать нужные данные из таблицы
+            for column in COLUMNS:
+                num = None
+                find_column = False
+                for idx, header in enumerate(headers):
+                    if column.find('|') != -1:
+                        if header.lower() in column.split('|'):
+                            find_column = True
+                    else:
+                        if header.lower() == column:
+                            find_column = True
+                    if find_column:
+                        num = idx
+                        break
+                mapping.append(num)
 
             rows = table.find_all('tr', {'class': ['lineOne', 'lineTwo']})
             result = []
@@ -50,6 +49,8 @@ class F1NewsTestingParser(Parser):
                             pos, _, racer = [i.strip() for i in row[i].text.split('.') if i]
                             line.extend([pos, racer])
                         else:
+                            if row[i].text.startswith('+'):
+                                need_correct_lap_time = True
                             line.append(self._normalize(row[i].text))
                     else:
                         line.append(None)
