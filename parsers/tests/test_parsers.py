@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from parsers.f1_news_race_calatog_parser import F1NewsRaceCatalogParser
 from parsers.f1_news_race_result_parser import F1NewsRaceResultParser
+from parsers.f1_news_race_starting_positions_parser import F1NewsRaceStartingPositionsParser
 from parsers.f1_news_team_points_parser import F1NewsTeamPointsParser
 from parsers.f1_news_testing_parser import F1NewsTestingParser
 from parsers.proxy_catalog_parser import ProxyCatalogParser
@@ -11,9 +12,13 @@ from parsers.proxy_catalog_parser import ProxyCatalogParser
 
 class TestParser(ABC, unittest.TestCase):
     def setUp(self):
-        base_path = os.path.dirname(os.path.realpath(__file__))
-        with open(os.path.join(base_path, self.get_response_file_path()), 'r') as r:
-            self._parser = self.init_parser(r.read())
+        self._base_path = os.path.dirname(os.path.realpath(__file__))
+        base_file = self.get_response_file_path()
+        self._parser = self._load_parser(base_file)
+
+    def _load_parser(self, base_file):
+        with open(os.path.join(self._base_path, base_file), mode='r', encoding='utf-8') as r:
+            return self.init_parser(r.read())
 
     @abstractmethod
     def init_parser(self, html):
@@ -122,27 +127,27 @@ class TestF1NewsTeamPointsParser(TestParser):
 class TestF1NewsRaceCatalogParse(TestParser):
     def test_links(self):
         expected = (
-            'https://f1news.ru/Championship/2016/australia/race.shtml',
-            'https://f1news.ru/Championship/2016/bahrain/race.shtml',
-            'https://f1news.ru/Championship/2016/china/race.shtml',
-            'https://f1news.ru/Championship/2016/russia/race.shtml',
-            'https://f1news.ru/Championship/2016/spain/race.shtml',
-            'https://f1news.ru/Championship/2016/monaco/race.shtml',
-            'https://f1news.ru/Championship/2016/canada/race.shtml',
-            'https://f1news.ru/Championship/2016/europe/race.shtml',
-            'https://f1news.ru/Championship/2016/austria/race.shtml',
-            'https://f1news.ru/Championship/2016/britain/race.shtml',
-            'https://f1news.ru/Championship/2016/hungary/race.shtml',
-            'https://f1news.ru/Championship/2016/germany/race.shtml',
-            'https://f1news.ru/Championship/2016/belgium/race.shtml',
-            'https://f1news.ru/Championship/2016/italy/race.shtml',
-            'https://f1news.ru/Championship/2016/singapore/race.shtml',
-            'https://f1news.ru/Championship/2016/malaysia/race.shtml',
-            'https://f1news.ru/Championship/2016/japan/race.shtml',
-            'https://f1news.ru/Championship/2016/usa/race.shtml',
-            'https://f1news.ru/Championship/2016/mexico/race.shtml',
-            'https://f1news.ru/Championship/2016/brazil/race.shtml',
-            'https://f1news.ru/Championship/2016/abudhabi/race.shtml',
+            '/Championship/2016/australia/race.shtml',
+            '/Championship/2016/bahrain/race.shtml',
+            '/Championship/2016/china/race.shtml',
+            '/Championship/2016/russia/race.shtml',
+            '/Championship/2016/spain/race.shtml',
+            '/Championship/2016/monaco/race.shtml',
+            '/Championship/2016/canada/race.shtml',
+            '/Championship/2016/europe/race.shtml',
+            '/Championship/2016/austria/race.shtml',
+            '/Championship/2016/britain/race.shtml',
+            '/Championship/2016/hungary/race.shtml',
+            '/Championship/2016/germany/race.shtml',
+            '/Championship/2016/belgium/race.shtml',
+            '/Championship/2016/italy/race.shtml',
+            '/Championship/2016/singapore/race.shtml',
+            '/Championship/2016/malaysia/race.shtml',
+            '/Championship/2016/japan/race.shtml',
+            '/Championship/2016/usa/race.shtml',
+            '/Championship/2016/mexico/race.shtml',
+            '/Championship/2016/brazil/race.shtml',
+            '/Championship/2016/abudhabi/race.shtml',
         )
         self.assertEqual(expected, self._parser.links())
 
@@ -171,6 +176,32 @@ class TestF1NewsRaceCatalogParse(TestParser):
             'Яс-Марина',
         )
         self.assertEqual(expected, self._parser.tracks())
+
+    def test_laps(self):
+        expected = (
+            '57',
+            '57',
+            '56',
+            '53',
+            '66',
+            '78',
+            '70',
+            '51',
+            '71',
+            '52',
+            '70',
+            '67',
+            '44',
+            '53',
+            '61',
+            '56',
+            '53',
+            '56',
+            '71',
+            '71',
+            '55',
+        )
+        self.assertEqual(expected, self._parser.laps())
 
     def get_response_file_path(self):
         return 'responses/f1-news-race-catalog-2016.html'
@@ -206,30 +237,46 @@ class TestF1NewsRaceResultParser(TestParser):
         ]
         self.assertEqual(expected, self._parser.points())
 
+    def test_points_for_first_race(self):
+        expected = [
+            ('1', 'Росберг', '25'),
+            ('2', 'Магнуссен', '18'),
+            ('3', 'Баттон', '15'),
+            ('4', 'Алонсо', '12'),
+            ('5', 'Боттас', '10'),
+            ('6', 'Хюлкенберг', '8'),
+            ('7', 'Райкконен', '6'),
+            ('8', 'Вернь', '4'),
+            ('9', 'Квят', '2'),
+            ('10', 'Перес', '1'),
+        ]
+        parser = self._load_parser('responses/f1-news-race-1-2014.html')
+        self.assertEqual(expected, parser.points())
+
     def test_results(self):
         expected = [
-            ('1', 'Росберг', 'Mercedes', '200.482'),
-            ('2', 'Хэмилтон', 'Mercedes', '199.584'),
-            ('3', 'Райкконен', 'Ferrari', '199.335'),
-            ('4', 'Боттас', 'Williams', '198.688'),
-            ('5', 'Масса', 'Williams', '197.834'),
-            ('6', 'Алонсо', 'McLaren', '196.587'),
-            ('7', 'Магнуссен', 'Renault', '196.282'),
-            ('8', 'Грожан', 'Haas', '196.213'),
-            ('9', 'Перес', 'Force India', '196.160'),
-            ('10', 'Баттон', 'McLaren', '196.021'),
-            ('11', 'Риккардо', 'Red Bull', '195.752'),
-            ('12', 'Сайнс', 'Toro Rosso', '195.429'),
-            ('13', 'Палмер', 'Renault', '195.428'),
-            ('14', 'Эриксон', 'Sauber', '195.359'),
-            ('15', 'Квят', 'Red Bull', '194.815'),
-            ('16', 'Наср', 'Sauber', '194.586'),
-            ('17', 'Гутьеррес', 'Haas', '194.340'),
-            ('18', 'Верляйн', 'Manor', '191.625'),
-            (None, 'Ферстаппен', 'Toro Rosso', None),
-            (None, 'Харьянто', 'Manor', None),
-            (None, 'Хюлкенберг', 'Force India', None),
-            (None, 'Феттель', 'Ferrari', None),
+            ('1', 'Росберг', 'Mercedes', '200.482', None),
+            ('2', 'Хэмилтон', 'Mercedes', '199.584', None),
+            ('3', 'Райкконен', 'Ferrari', '199.335', None),
+            ('4', 'Боттас', 'Williams', '198.688', None),
+            ('5', 'Масса', 'Williams', '197.834', None),
+            ('6', 'Алонсо', 'McLaren', '196.587', None),
+            ('7', 'Магнуссен', 'Renault', '196.282', None),
+            ('8', 'Грожан', 'Haas', '196.213', None),
+            ('9', 'Перес', 'Force India', '196.160', None),
+            ('10', 'Баттон', 'McLaren', '196.021', None),
+            ('11', 'Риккардо', 'Red Bull', '195.752', None),
+            ('12', 'Сайнс', 'Toro Rosso', '195.429', None),
+            ('13', 'Палмер', 'Renault', '195.428', None),
+            ('14', 'Эриксон', 'Sauber', '195.359', None),
+            ('15', 'Квят', 'Red Bull', '194.815', None),
+            ('16', 'Наср', 'Sauber', '194.586', None),
+            ('17', 'Гутьеррес', 'Haas', '194.340', None),
+            ('18', 'Верляйн', 'Manor', '191.625', None),
+            (None, 'Ферстаппен', 'Toro Rosso', None, '34'),
+            (None, 'Харьянто', 'Manor', None, '1'),
+            (None, 'Хюлкенберг', 'Force India', None, '1'),
+            (None, 'Феттель', 'Ferrari', None, '1'),
         ]
         self.assertEqual(expected, self._parser.results())
 
@@ -238,6 +285,41 @@ class TestF1NewsRaceResultParser(TestParser):
 
     def init_parser(self, html):
         return F1NewsRaceResultParser(html)
+
+
+class TestF1NewsRaceStartingPositionsParser(TestParser):
+    def test_positions(self):
+        expected = [
+            ('1', 'Росберг', '1:35.417'),
+            ('2', 'Боттас', '1:36.536'),
+            ('3', 'Райкконен', '1:36.663'),
+            ('4', 'Масса', '1:37.016'),
+            ('5', 'Риккардо', '1:37.125'),
+            ('6', 'Перес', '1:37.212'),
+            ('7', 'Феттель', '1:36.123'),
+            ('8', 'Квят', '1:37.459'),
+            ('9', 'Ферстаппен', '1:37.583'),
+            ('10', 'Хэмилтон', None),
+            ('11', 'Сайнс-младший', '1:37.652'),
+            ('12', 'Баттон', '1:37.701'),
+            ('13', 'Хюлкенберг', '1:37.771'),
+            ('14', 'Алонсо', '1:37.807'),
+            ('15', 'Грожан', '1:38.055'),
+            ('16', 'Гутьеррес', '1:38.115'),
+            ('17', 'Магнуссен', '1:38.914'),
+            ('18', 'Палмер', '1:39.009'),
+            ('19', 'Наср', '1:39.018'),
+            ('20', 'Верляйн', '1:39.399'),
+            ('21', 'Харьянто', '1:39.463'),
+            ('22', 'Эриксон', '1:39.519'),
+        ]
+        self.assertEqual(expected, self._parser.positions())
+
+    def get_response_file_path(self):
+        return 'responses/f1-news-starting-positions-4-2016.html'
+
+    def init_parser(self, html):
+        return F1NewsRaceStartingPositionsParser(html)
 
 
 if __name__ == '__main__':

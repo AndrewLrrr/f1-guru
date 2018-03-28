@@ -13,7 +13,7 @@ class Cacher:
     def __init__(self, prefix=''):
         prefix = re.sub('([\w-]+)', '\1', prefix)
         if not prefix:
-            raise ValueError('Incorrect prefix key')
+            raise ValueError('Incorrect cache key')
         self._directory_path = os.path.join(STORAGE_PATH, 'cache', prefix)
 
     def put(self, key, value):

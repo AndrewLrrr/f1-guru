@@ -1,3 +1,5 @@
+import re
+
 from parsers.parser import Parser
 
 
@@ -13,13 +15,20 @@ class F1NewsRaceResultParser(Parser):
             pos, _, driver = [s.replace('*', '').strip() for s in row[0].text.split('.')]
             team = row[1].text
             speed = row[3].text
-            results.append((pos, driver, team, speed))
+            results.append((pos, driver, team, speed, None))
+        # Добавляем сошедших гонщиков
         rows = descent_table.find_all('tr', {'class': ['lineOne', 'lineTwo']})
-        for row in reversed(rows):
+        first_ret_lap = int(rows[0].find_all('td')[2].text)
+        last_ret_lap = int(rows[-1].find_all('td')[2].text)
+        if first_ret_lap < last_ret_lap:
+            rows = reversed(rows)
+        for row in rows:
             row = row.find_all('td')
             _, driver = [s.strip() for s in row[0].text.split('.')]
             team = row[1].text
-            results.append((None, driver, team, None))
+            retire_lap = row[2].text
+
+            results.append((None, driver, team, None, retire_lap))
         return results
 
     def weather(self):
@@ -31,7 +40,13 @@ class F1NewsRaceResultParser(Parser):
         rows = table.find_all('tr', {'class': ['lineOne', 'lineTwo']})
         for row in rows:
             row = row.find_all('td')
-            pos, _, driver = [s.strip() for s in row[1].text.split('.')]
+            if not re.search('^\d+\..*', row[1].text):
+                text = row[0].text
+            else:
+                text = row[1].text
+            parts = [s.strip() for s in text.split('.')]
+            pos = parts[0]
+            driver = parts[-1]
             points = row[-1].text
             results.append((pos, driver, points))
         return results
