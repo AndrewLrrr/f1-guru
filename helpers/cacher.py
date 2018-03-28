@@ -11,9 +11,9 @@ class Cacher:
     _protocol = 2
 
     def __init__(self, prefix=''):
-        prefix = re.sub('([\w-]+)', '\1', prefix)
-        if not prefix:
-            raise ValueError('Incorrect cache key')
+        # В целях безопасности проверяем на слеш и точки
+        if re.search(r'[/.\\]+', prefix):
+            raise ValueError('Incorrect cache prefix')
         self._directory_path = os.path.join(STORAGE_PATH, 'cache', prefix)
 
     def put(self, key, value):

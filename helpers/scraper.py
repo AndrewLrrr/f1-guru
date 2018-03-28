@@ -23,7 +23,7 @@ class Scraper(Request):
         if self._protocol not in ('http', 'https',):
             raise ValueError('Unsupported protocol `{}`. You must use `http` or `https` only'.format(protocol))
 
-    def scrape(self, uri, *, params=None, headers=None):
+    def scrape(self, uri='', *, params=None, headers=None):
         self._path = re.sub(r'^/?(.*?)/?$', r'\1', uri.lower().strip())
         secure = self._protocol == 'https'
         return self.get(params=params, headers=headers, secure=secure)

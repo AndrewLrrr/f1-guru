@@ -1,12 +1,13 @@
 import logging
 import os
+import sys
 
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 import settings
 from decorators import decorators
-from helpers.scraper import ProxyScraper
+from helpers.scraper import ProxyScraper, Scraper
 from parsers.f1_news_race_calatog_parser import F1NewsRaceCatalogParser
 from parsers.f1_news_race_result_parser import F1NewsRaceResultParser
 from parsers.f1_news_race_starting_positions_parser import F1NewsRaceStartingPositionsParser
@@ -18,10 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 SCRAPERS = {
+    'f1news.ru': Scraper('f1news.ru', protocol='https'),
+}
+
+PROXY_SCRAPERS = {
     'f1news.ru': ProxyScraper('f1news.ru', protocol='https'),
 }
 
-YEARS_PERIOD = (2014, 2015, 2016, 2017, 2018,)
+YEARS_PERIOD = (2014, 2015, 2016, 2017, 2018)
 
 TEAMS_MAPPING = {
     'Mercedes': 'Mercedes',
@@ -177,14 +182,18 @@ RACING_RESULTS_HEADERS = (
     'laps',
     'points',
 )
-TESTING_RESULTS_HEADERS = ('position', 'team', 'time', 'laps', 'tyre_type', 'day', 'track')
+
+TESTING_RESULTS_HEADERS = ('day', 'year', 'track', 'position', 'time', 'laps', 'tyres', 'team')
+
 TEAMS_DATA_HEADERS = ('team', 'engine', 'team_leader', 'technical_director', 'budget', 'is_factory_team')
+
 TEAM_POINTS_HEADERS = ('position', 'team', 'points')
 
 
 @decorators.save_to_cache('scraped_data')
 def scrape_data(scraper_code, uri, params=None, headers=None):
-    scraper = SCRAPERS.get(scraper_code)
+    scrapers_source = PROXY_SCRAPERS if settings.USE_PROXY else SCRAPERS
+    scraper = scrapers_source.get(scraper_code)
     if not scraper:
         raise ValueError('Scraper for site `{}` does not exist'.format(scraper))
     return scraper.scrape(uri, params=params, headers=headers)
@@ -203,7 +212,7 @@ def join_laps(results):
 
 
 def get_testing_results(year, source='f1news.ru'):
-    full_results = []
+    total = []
     day = 1
     for uri in TESTING_URI[source][year]:
         data = scrape_data(source, uri)
@@ -213,19 +222,19 @@ def get_testing_results(year, source='f1news.ru'):
         for results in reversed(all_results):
             results = join_laps(results)
             for result in results:
-                result.append(day)
-                full_results.append((
-                    result[0],
-                    year,
-                    TEAMS_MAPPING[result[2]],
-                    result[3],
-                    result[4],
-                    result[5],
+                pos, driver, team, time, laps, tyres = result
+                total.append((
                     day,
+                    year,
                     track,
+                    int(pos),
+                    time,
+                    laps,
+                    tyres,
+                    TEAMS_MAPPING[team],
                 ))
             day += 1
-    return full_results
+    return total
 
 
 def get_race_results(year, source='f1news.ru'):
@@ -237,8 +246,8 @@ def get_race_results(year, source='f1news.ru'):
     laps = parser.laps()
     for i, uri in enumerate(uris):
         start_positions_uri = uri.replace('race.shtml', 'grid.shtml')
-        race_parser = load_race_results_by_uri(uri)
-        start_positions_parser = load_race_starting_positions_by_uri(start_positions_uri)
+        race_parser = load_race_results_by_uri(uri, source=source)
+        start_positions_parser = load_race_starting_positions_by_uri(start_positions_uri, source=source)
         total = []
         weather = race_parser.weather().split('.')[1].strip()
         results = race_parser.results()
@@ -304,8 +313,6 @@ def get_team_points(year, source='f1news.ru'):
 
 def build_testing_data_sets(year):
     results_df = pd.DataFrame(get_testing_results(year), columns=TESTING_RESULTS_HEADERS)
-    team_data_df = pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
-    results_df = results_df.merge(team_data_df, on='team').sort_values(['day', 'time'])
     if year != 2018:
         points_df = pd.DataFrame(get_team_points(year), columns=TEAM_POINTS_HEADERS)[['team', 'points']]
         scaler = MinMaxScaler()
@@ -317,45 +324,70 @@ def build_testing_data_sets(year):
     return results_df
 
 
-def build_racing_data_sets(year=None):
-    results_df = pd.DataFrame(get_race_results(year), columns=RACING_RESULTS_HEADERS)
-    team_data_df = pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
-    results_df = results_df.merge(team_data_df, on='team').sort_values(['year', 'number', 'finish_position'])
-    print(results_df)
-    return ''
+def build_racing_data_sets(year):
+    return pd.DataFrame(get_race_results(year), columns=RACING_RESULTS_HEADERS)
 
 
-def save_data_frame_as_csv(df, path):
+def build_team_data_sets(year):
+    return pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
+
+
+def save_data_frame_as_csv(df, period, prefix):
+    if len(period) > 1:
+        path = '{}-data-{}-{}'.format(prefix, period[0], period[-1])
+    else:
+        path = '{}-data-{}'.format(prefix, period[0])
     path = '{}.csv'.format(path) if not path.endswith('csv') else path
     full_path = os.path.join(settings.STORAGE_PATH, path)
     df.to_csv(full_path, encoding='utf-8')
 
 
 def main():
-    build_racing_data_sets(2014)
-    # logger.info('Start building data set...')
-    #
-    # mode = sys.argv[1]
-    # test_df = None
-    # train_df = None
-    #
-    # if mode == 'testing':  # Make testing data set
-    #     for year in YEARS_PERIOD:
-    #         if year == 2018:
-    #             test_df = build_testing_data_sets(year)
-    #         else:
-    #             if train_df is None:
-    #                 train_df = build_testing_data_sets(year)
-    #             else:
-    #                 train_df = pd.concat([train_df, build_testing_data_sets(year)])
-    #     save_data_frame_as_csv(test_df, 'test-testing-2018')
-    #     save_data_frame_as_csv(train_df, 'train-testing-2014-2017')
-    # elif mode == 'racing':  # Make racing data set
-    #     data = build_racing_data_sets(2014)
-    # else:
-    #     raise ValueError('Unsupported data set type `{}`'.format(mode))
-    #
-    # logger.info('Finish building data set')
+    logger.info('Start building data set...')
+
+    try:
+        modes = [sys.argv[1]]
+    except IndexError:
+        modes = ('testing', 'racing', 'team',)
+
+    try:
+        current_year = int(sys.argv[2])
+        if current_year < YEARS_PERIOD[0] or current_year > YEARS_PERIOD[-1]:
+            raise ValueError('Year should be between {} and {}'.format(YEARS_PERIOD[0], YEARS_PERIOD[-1]))
+    except IndexError:
+        current_year = None
+
+    if not current_year:
+        period = YEARS_PERIOD[:-1]  # 2018 год не добавляем в выборку
+    else:
+        period = [current_year]
+    for mode in modes:
+        df = None
+        if mode == 'testing':
+            for year in period:
+                if df is None:
+                    df = build_testing_data_sets(year)
+                else:
+                    df = pd.concat([df, build_testing_data_sets(year)])
+            save_data_frame_as_csv(df, period, 'testing')
+        elif mode == 'racing':
+            for year in period:
+                if df is None:
+                    df = build_racing_data_sets(year)
+                else:
+                    df = pd.concat([df, build_racing_data_sets(year)])
+            save_data_frame_as_csv(df, period, 'racing')
+        elif mode == 'team':
+            for year in period:
+                if df is None:
+                    df = build_team_data_sets(year)
+                else:
+                    df = pd.concat([df, build_team_data_sets(year)])
+            save_data_frame_as_csv(df, period, 'team')
+        else:
+            raise ValueError('Unsupported data set type `{}`'.format(mode))
+
+    logger.info('Finish building data set')
 
 
 if __name__ == '__main__':

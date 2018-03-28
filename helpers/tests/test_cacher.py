@@ -114,6 +114,20 @@ class TestCacher(unittest.TestCase):
         val = c2.get('f')
         self.assertEqual(1.5, val)
 
+    def test_incorrect_prefix_exception(self):
+        with self.assertRaises(ValueError) as context:
+            cacher.Cacher('/root')
+        self.assertEqual('Incorrect cache prefix', str(context.exception))
+        with self.assertRaises(ValueError) as context:
+            cacher.Cacher('..root')
+        self.assertEqual('Incorrect cache prefix', str(context.exception))
+        with self.assertRaises(ValueError) as context:
+            cacher.Cacher('root/')
+        self.assertEqual('Incorrect cache prefix', str(context.exception))
+        with self.assertRaises(ValueError) as context:
+            cacher.Cacher('../root')
+        self.assertEqual('Incorrect cache prefix', str(context.exception))
+
 
 if __name__ == '__main__':
     unittest.main()
