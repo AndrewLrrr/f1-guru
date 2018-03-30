@@ -1,9 +1,9 @@
 import logging
 import os
 import sys
+from collections import defaultdict
 
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 
 import settings
 from decorators import decorators
@@ -174,6 +174,7 @@ RACING_RESULTS_HEADERS = (
     'driver',
     'finish_position',
     'start_position',
+    'average_finish_position',
     'average_speed',
     'lag_from_the_leader',
     'lag_from_the_next',
@@ -181,6 +182,7 @@ RACING_RESULTS_HEADERS = (
     'weather',
     'laps',
     'points',
+
 )
 
 TESTING_RESULTS_HEADERS = ('day', 'year', 'track', 'position', 'time', 'laps', 'tyres', 'team')
@@ -244,6 +246,7 @@ def get_race_results(year, source='f1news.ru'):
     uris = parser.links()
     tracks = parser.tracks()
     laps = parser.laps()
+    positions = defaultdict(list)
     for i, uri in enumerate(uris):
         start_positions_uri = uri.replace('race.shtml', 'grid.shtml')
         race_parser = load_race_results_by_uri(uri, source=source)
@@ -258,31 +261,34 @@ def get_race_results(year, source='f1news.ru'):
         diff_prev_speed = 0.0
         diff_leader_speed = 0.0
         for j in range(len(results)):
-            pos, driver, team, speed, retire_lap = results[j]
+            pos, driver, team, average_speed, retire_lap = results[j]
             if pos == 'DQ':
                 continue
-            speed = float(speed) if speed else None
+            average_speed = float(average_speed) if average_speed else None
             if j == 0:
-                leader_speed = speed
-                prev_speed = speed
+                leader_speed = average_speed
+                prev_speed = average_speed
             else:
-                diff_prev_speed = round(prev_speed - speed, 3) if speed else None
-                diff_leader_speed = round(leader_speed - speed, 3) if speed else None
-                prev_speed = speed
+                diff_prev_speed = round(prev_speed - average_speed, 3) if average_speed else None
+                diff_leader_speed = round(leader_speed - average_speed, 3) if average_speed else None
+                prev_speed = average_speed
             driver = results[j][1]
             point = [p for p in points if p[1] == driver]
             point = int(point[0][2]) if point else 0
             start_position = [sp for sp in start_positions if sp[1] == driver]
             start_position = int(start_position[0][0]) if start_position and start_position[0][0] else None
+            finish_position = j+1
+            positions[driver].append(finish_position)
             result = []
             result.extend([
                 i+1,
                 year,
                 tracks[i],
                 driver,
-                j+1,
+                finish_position,
                 start_position,
-                speed,
+                sum(positions[driver]) / len(positions[driver]),  # Средняя позиция в гонке
+                average_speed,
                 diff_leader_speed,
                 diff_prev_speed,
                 team,
@@ -315,12 +321,8 @@ def build_testing_data_sets(year):
     results_df = pd.DataFrame(get_testing_results(year), columns=TESTING_RESULTS_HEADERS)
     if year != 2018:
         points_df = pd.DataFrame(get_team_points(year), columns=TEAM_POINTS_HEADERS)[['team', 'points']]
-        scaler = MinMaxScaler()
-        points_df['points'] = pd.DataFrame(
-            scaler.fit_transform(points_df['points'].astype(float).values.reshape(-1, 1))
-        )
+        points_df['points'] = points_df['points'].astype(float)
         results_df = results_df.merge(points_df, on='team').sort_values(['day', 'time', 'points'])
-        results_df.rename(columns={'points': 'strength'}, inplace=True)
     return results_df
 
 
@@ -329,17 +331,18 @@ def build_racing_data_sets(year):
 
 
 def build_team_data_sets(year):
-    return pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
+    df = pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
+    df['year'] = year
+    return df
 
 
 def save_data_frame_as_csv(df, period, prefix):
     if len(period) > 1:
-        path = '{}-data-{}-{}'.format(prefix, period[0], period[-1])
+        path = '{}-data-{}-{}.csv'.format(prefix, period[0], period[-1])
     else:
-        path = '{}-data-{}'.format(prefix, period[0])
-    path = '{}.csv'.format(path) if not path.endswith('csv') else path
+        path = '{}-data-{}.csv'.format(prefix, period[0])
     full_path = os.path.join(settings.STORAGE_PATH, path)
-    df.to_csv(full_path, encoding='utf-8')
+    df.to_csv(full_path, encoding='utf-8', index=False)
 
 
 def main():
@@ -361,6 +364,7 @@ def main():
         period = YEARS_PERIOD[:-1]  # 2018 год не добавляем в выборку
     else:
         period = [current_year]
+
     for mode in modes:
         df = None
         if mode == 'testing':

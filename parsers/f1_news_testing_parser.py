@@ -62,7 +62,8 @@ class F1NewsTestingParser(Parser):
 
     @staticmethod
     def _normalize(item):
-        if item.find('без времени') != -1:
+        item = item.strip()
+        if item.find('без времени') != -1 or not item:
             return None
         if item.startswith('+'):
             item = item.replace('+', '')

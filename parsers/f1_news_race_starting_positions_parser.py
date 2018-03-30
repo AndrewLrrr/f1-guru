@@ -21,13 +21,17 @@ class F1NewsRaceStartingPositionsParser(Parser):
                 driver = None
                 for s in content:
                     if search_driver_with_pos.search(s.text.strip()):
-                        driver_info = [c.strip() for c in s.text.split('.') if c.strip()]
+                        driver_info = [c.strip().strip('.') for c in s.text.split('.') if c.strip()]
                         driver = [c.strip() for c in driver_info[1].split()][-1]
+                        if driver.find('-') != -1:
+                            driver = driver.split('-')[0]
                     elif (
                         search_driver.search(s.text.strip())
                         and s.text.strip().lower() not in ('без времени', 'старт с пит-лейн',)
                     ):
                         driver = [c.strip() for c in s.text.split()][-1]
+                        if driver.find('-') != -1:
+                            driver = driver.split('-')[0]
                 pos = re.search('^(\d{1,2})\.?', item.text.strip(), re.MULTILINE)
                 if pos:
                     pos = pos.group(1)

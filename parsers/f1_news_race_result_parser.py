@@ -12,9 +12,11 @@ class F1NewsRaceResultParser(Parser):
         rows = results_table.find_all('tr', {'class': ['lineOne', 'lineTwo']})
         for row in rows:
             row = row.find_all('td')
-            driver_data = [s.replace('*', '').strip() for s in row[0].text.split('.')]
+            driver_data = [s.replace('*', '').strip().strip('.') for s in row[0].text.split('.') if s.strip()]
             pos = driver_data[0]
             driver = driver_data[-1]
+            if driver.find('-') != -1:
+                driver = driver.split('-')[0]
             team = row[1].text
             speed = row[3].text
             results.append((pos, driver, team, speed, None))
@@ -29,7 +31,9 @@ class F1NewsRaceResultParser(Parser):
                 rows = reversed(rows)
             for row in rows:
                 row = row.find_all('td')
-                _, driver = [s.strip() for s in row[0].text.split('.')]
+                _, driver = [s.strip().strip('.') for s in row[0].text.split('.') if s.strip()]
+                if driver.find('-') != -1:
+                    driver = driver.split('-')[0]
                 team = row[1].text
                 retire_lap = '0' if row[2].text == 'нст' else row[2].text
                 results.append((None, driver, team, None, retire_lap))
