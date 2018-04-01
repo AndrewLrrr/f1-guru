@@ -328,7 +328,7 @@ def get_testing_results(year, source='f1news.ru'):
 
 def rebuild_race_results_with_disqualified_drivers(results):
     """
-    Перестраивает результаты гонки, если там есть дисквалифицированные гонщики, 
+    Перестраивает результаты гонки если там есть дисквалифицированные гонщики, 
     в таком случае, данный гонщик извлекается из списка и добавляется в самый конец 
     итогового протокола, остальные, соответсвенно, поднимаются на одну позицию вверх
     :param results: Результаты гонки
@@ -520,6 +520,8 @@ def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
         else:
             prev_result = all_race_results[idx-1]
         for row1 in result:
+            # Устанавливаем значения по умолчанию
+            driver_has_been_found = False
             finish_position_prev = None
             start_position_prev = None
             average_speed_prev = None
@@ -527,8 +529,10 @@ def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
             diff_prev_speed_prev = None
             weather_prev = None
             team_prev = None
+            # Сначала ищем совпадения по имени гонщика
             for row2 in prev_result:
                 if row1.driver == row2.driver:
+                    driver_has_been_found = True
                     finish_position_prev = row2.finish_position
                     start_position_prev = row2.start_position
                     average_speed_prev = row2.average_speed
@@ -536,6 +540,20 @@ def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
                     diff_prev_speed_prev = row2.diff_prev_speed
                     weather_prev = row2.weather
                     team_prev = row2.team
+            # Если по имени гонщика ничего не найдено, то скорее всего этот гонщик дебютант чемпионата,
+            # поэтому ищем совпадения по названию команды
+            if not driver_has_been_found:
+                for row2 in prev_result:
+                    if row1.team == row2.team and row1.driver != row2.driver:
+                        finish_position_prev = row2.finish_position
+                        start_position_prev = row2.start_position
+                        average_speed_prev = row2.average_speed
+                        diff_leader_speed_prev = row2.diff_leader_speed
+                        diff_prev_speed_prev = row2.diff_prev_speed
+                        weather_prev = row2.weather
+                        team_prev = row2.team
+            # TODO: Данная логика не учитывает появление новой команды в чемпионате, в текущем (2018) году таких
+            # TODO: команд нет, но если такие появятся в будущем, подумать, что с этим можно сделать.
             merged_all_race_results.append([
                 row1.number,
                 row1.year,
