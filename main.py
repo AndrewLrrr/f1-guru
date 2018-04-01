@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import pandas as pd
 
@@ -18,12 +18,25 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# ------------------------------------------------- Constants Block -------------------------------------------------- #
+
+
 SCRAPERS = {
     'f1news.ru': Scraper('f1news.ru', protocol='https'),
 }
 
 PROXY_SCRAPERS = {
     'f1news.ru': ProxyScraper('f1news.ru', protocol='https'),
+}
+
+PARSERS = {
+    'f1news.ru': {
+        'race_catalog': F1NewsRaceCatalogParser,
+        'race_results': F1NewsRaceResultParser,
+        'race_starting_positions': F1NewsRaceStartingPositionsParser,
+        'team_points': F1NewsTeamPointsParser,
+        'testing': F1NewsTestingParser,
+    }
 }
 
 YEARS_PERIOD = (2014, 2015, 2016, 2017, 2018)
@@ -34,17 +47,42 @@ TEAMS_MAPPING = {
     'Williams': 'Williams',
     'Haas F1': 'Haas',
     'Haas': 'Haas',
-    'Red Bull Racing': 'Red Bull',
     'Red Bull': 'Red Bull',
     'Force India': 'Force India',
     'Toro Rosso': 'Toro Rosso',
-    'Renault': 'Toro Rosso',
+    'Renault': 'Renault',
     'McLaren': 'McLaren',
     'Sauber': 'Sauber',
     'Lotus': 'Lotus',
     'Manor': 'Manor',
     'Marussia': 'Marussia',
     'Caterham': 'Caterham',
+    'Red Bull Racing': 'Red Bull',
+    'Red Bull/Renault': 'Red Bull',
+    'Williams/Mercedes': 'Williams',
+    'Sauber/Ferrari': 'Sauber',
+    'Force India/Mercedes': 'Force India',
+    'Toro Rosso/Renault': 'Toro Rosso',
+    'McLaren/Honda': 'McLaren',
+    'МсLaren': 'McLaren',
+}
+
+TYRES_MAPPING = {
+    'SSoft': 'SuperSoft',
+}
+
+TRACKS_MAPPING = {
+    'Марина-Бей': 'Сингапур',
+    'Альберт-парк': 'Мельбурн',
+}
+
+WEATHER_MAPPING = {
+    'Сухо': 'dry',
+    'Подсыхающая трасса': 'changeable',
+    'Дождь': 'wet',
+    'Дождь в конце гонки': 'changeable',
+    'облачность': 'dry',
+    'Дождь, в конце сухо': 'changeable',
 }
 
 # Дополнительные данные будем записывать в формате:
@@ -150,6 +188,7 @@ TESTING_URI = {
 
 RACING_CATALOGS_URI = {
     'f1news.ru': {
+        2013: 'Championship/2013/',
         2014: 'Championship/2014/',
         2015: 'Championship/2015/',
         2016: 'Championship/2016/',
@@ -171,6 +210,8 @@ RACING_RESULTS_HEADERS = (
     'number',
     'year',
     'track',
+    'laps',
+    'points',
     'driver',
     'finish_position',
     'start_position',
@@ -180,9 +221,14 @@ RACING_RESULTS_HEADERS = (
     'lag_from_the_next',
     'team',
     'weather',
-    'laps',
-    'points',
-
+    'finish_position_prev',
+    'start_position_prev',
+    'average_finish_position_prev',
+    'average_speed_prev',
+    'lag_from_the_leader_prev',
+    'lag_from_the_next_prev',
+    'team_prev',
+    'weather_prev',
 )
 
 TESTING_RESULTS_HEADERS = ('day', 'year', 'track', 'position', 'time', 'laps', 'tyres', 'team')
@@ -192,8 +238,19 @@ TEAMS_DATA_HEADERS = ('team', 'engine', 'team_leader', 'technical_director', 'bu
 TEAM_POINTS_HEADERS = ('position', 'team', 'points')
 
 
+# -------------------------------------------------- Helpers Block --------------------------------------------------- #
+
+
 @decorators.save_to_cache('scraped_data')
 def scrape_data(scraper_code, uri, params=None, headers=None):
+    """
+    Загружает заданную станицу сайта и кеширует ее для повторных запросов
+    :param str scraper_code: Источник данных
+    :param str uri: Uri
+    :param dict params: Дополнительные параметры запроса
+    :param dict headers: Дополнительные заголовки запроса
+    :return: str
+    """
     scrapers_source = PROXY_SCRAPERS if settings.USE_PROXY else SCRAPERS
     scraper = scrapers_source.get(scraper_code)
     if not scraper:
@@ -201,7 +258,16 @@ def scrape_data(scraper_code, uri, params=None, headers=None):
     return scraper.scrape(uri, params=params, headers=headers)
 
 
-def join_laps(results):
+# ------------------------------------------------ Test Results Block ------------------------------------------------ #
+
+
+def join_team_results(results):
+    """
+    Объединяет результаты всех гонщиков одной команды за тестовый день, 
+    оставляет в списке лучший результат, а также общую сумму пройденных кругов
+    :param results: Список результатов тестов за день
+    :return: list
+    """
     extra_rows = []
     for idx1, r1 in enumerate(results):
         for idx2, r2 in enumerate(results):
@@ -213,136 +279,365 @@ def join_laps(results):
     return results
 
 
+def get_team_points(year, source='f1news.ru'):
+    """
+    Загружает, парсит и возвращает итоговое количество очков в кубке конструкторов (результаты команд)
+    :param year: Год проведения чемпионата
+    :param source: Источник данных
+    :return: list
+    """
+    data = scrape_data(source, TEAM_POINTS_URI[source][year])
+    parser = PARSERS[source]['team_points'](data)
+    return parser.points()
+
+
 def get_testing_results(year, source='f1news.ru'):
+    """
+    Собирает результаты всех зимних тестов за сезон, считает дополнительные статистики
+    :param year: Год проведения чемпионата
+    :param source: Источник данных
+    :return: 
+    """
     total = []
     day = 1
     for uri in TESTING_URI[source][year]:
         data = scrape_data(source, uri)
-        parser = F1NewsTestingParser(data)
+        parser = PARSERS[source]['testing'](data)
         track = parser.track()
         all_results = parser.results()
         for results in reversed(all_results):
-            results = join_laps(results)
+            results = join_team_results(results)
             for result in results:
                 pos, driver, team, time, laps, tyres = result
                 total.append((
                     day,
                     year,
-                    track,
+                    track if track not in TRACKS_MAPPING else TRACKS_MAPPING[track],
                     int(pos),
                     time,
                     laps,
-                    tyres,
-                    TEAMS_MAPPING[team],
+                    tyres if tyres not in TYRES_MAPPING else TYRES_MAPPING[tyres],
+                    TEAMS_MAPPING[team.strip()],
                 ))
             day += 1
     return total
 
 
-def get_race_results(year, source='f1news.ru'):
+# ------------------------------------------------ Race Results Block ------------------------------------------------ #
+
+
+def rebuild_race_results_with_disqualified_drivers(results):
+    """
+    Перестраивает результаты гонки, если там есть дисквалифицированные гонщики, 
+    в таком случае, данный гонщик извлекается из списка и добавляется в самый конец 
+    итогового протокола, остальные, соответсвенно, поднимаются на одну позицию вверх
+    :param results: Результаты гонки
+    :return: list
+    """
+    new_res = []
+    disqualified = []
+    counter = 1
+    for pos, driver, team, average_speed, retire_lap in results:
+        if pos == 'DQ':
+            disqualified.append([driver, team, average_speed, retire_lap])
+        else:
+            new_res.append((counter, driver, team, average_speed, retire_lap))
+            counter += 1
+    for driver, team, average_speed, retire_lap in disqualified:
+        new_res.append((counter, driver, team, average_speed, retire_lap))
+        counter += 1
+    return new_res
+
+
+def fill_start_positions_na(positions):
+    """
+    Заполняет пустые стартовые позиции (в случае старта с пит-лейна или других проблем у гонщика)
+    :param positions: Список стартовых позиций
+    :return: list
+    """
+    PositionsData = namedtuple('PositionsData', ['pos', 'driver', 'time'])
+    result = []
+    for i, item in enumerate(positions):
+        pos, driver, time = item
+        result.append(PositionsData(*[i+1, driver, time]))
+    return result
+
+
+def get_race_results_by_uri(uri, source='f1news.ru'):
+    """
+    Собирает результаты гонки по uri, парсит и формирует заданный результат
+    :param uri: Uri
+    :param source: Источник данных
+    :return: list
+    """
     race_results = []
+    RaceData = namedtuple(
+        'RaceData',
+        [
+            'driver',
+            'finish_position',
+            'start_position',
+            'average_speed',
+            'diff_leader_speed',
+            'diff_prev_speed',
+            'retire_lap',
+            'points',
+            'team',
+            'weather',
+        ]
+    )
+    start_positions_uri = uri.replace('race.shtml', 'grid.shtml')
+    race_parser = load_race_results_by_uri(uri, source=source)
+    start_positions_parser = load_race_starting_positions_by_uri(start_positions_uri, source=source)
+    weather = race_parser.weather().split('.')[1].strip()
+    results = rebuild_race_results_with_disqualified_drivers(race_parser.results())
+    points = race_parser.points()
+    start_positions = fill_start_positions_na(start_positions_parser.positions())
+    leader_speed = 0.0
+    prev_speed = 0.0
+    diff_prev_speed = 0.0
+    diff_leader_speed = 0.0
+    for j in range(len(results)):
+        pos, driver, team, average_speed, retire_lap = results[j]
+        average_speed = float(average_speed) if average_speed else None
+        if j == 0:
+            leader_speed = average_speed
+            prev_speed = average_speed
+        else:
+            if average_speed:
+                diff_prev_speed = round(prev_speed - average_speed, 3) if prev_speed else None
+                diff_leader_speed = round(leader_speed - average_speed, 3) if leader_speed else None
+            else:
+                diff_prev_speed = None
+                diff_leader_speed = None
+            prev_speed = average_speed
+        driver = results[j][1]
+        point = [p for p in points if p[1] == driver]
+        point = int(point[0][2]) if point else 0
+        last_start_position = max([sp.pos for sp in start_positions]) + 1
+        start_position = [sp for sp in start_positions if sp.driver == driver]
+        start_position = start_position[0].pos if start_position else None
+        if not start_position:
+            start_position = last_start_position
+            last_start_position += 1
+        result = RaceData(*[
+            driver,
+            pos,
+            start_position,
+            average_speed,
+            diff_leader_speed,
+            diff_prev_speed,
+            int(retire_lap) if retire_lap else None,
+            point,
+            TEAMS_MAPPING[team.strip()],
+            WEATHER_MAPPING[weather],
+        ])
+        race_results.append(result)
+    return race_results
+
+
+def get_all_race_results(year, source='f1news.ru'):
+    """
+    Собирает результаты всех гонок за сезон, считает дополнительные статистики
+    :param year: Год проведения чемпионата
+    :param source: Источник данных
+    :return: list
+    """
+    RaceData = namedtuple(
+        'RaceData',
+        [
+            'number',
+            'year',
+            'track',
+            'driver',
+            'finish_position',
+            'start_position',
+            'average_finish_position',
+            'average_finish_position_prev',
+            'average_speed',
+            'diff_leader_speed',
+            'diff_prev_speed',
+            'team',
+            'weather',
+            'laps',
+            'points',
+        ]
+    )
+    all_race_results = []
     catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year])
-    parser = F1NewsRaceCatalogParser(catalog_data)
+    parser = PARSERS[source]['race_catalog'](catalog_data)
     uris = parser.links()
     tracks = parser.tracks()
     laps = parser.laps()
     positions = defaultdict(list)
     for i, uri in enumerate(uris):
-        start_positions_uri = uri.replace('race.shtml', 'grid.shtml')
-        race_parser = load_race_results_by_uri(uri, source=source)
-        start_positions_parser = load_race_starting_positions_by_uri(start_positions_uri, source=source)
-        total = []
-        weather = race_parser.weather().split('.')[1].strip()
-        results = race_parser.results()
-        points = race_parser.points()
-        start_positions = start_positions_parser.positions()
-        leader_speed = 0
-        prev_speed = 0.0
-        diff_prev_speed = 0.0
-        diff_leader_speed = 0.0
-        for j in range(len(results)):
-            pos, driver, team, average_speed, retire_lap = results[j]
-            if pos == 'DQ':
-                continue
-            average_speed = float(average_speed) if average_speed else None
-            if j == 0:
-                leader_speed = average_speed
-                prev_speed = average_speed
-            else:
-                diff_prev_speed = round(prev_speed - average_speed, 3) if average_speed else None
-                diff_leader_speed = round(leader_speed - average_speed, 3) if average_speed else None
-                prev_speed = average_speed
-            driver = results[j][1]
-            point = [p for p in points if p[1] == driver]
-            point = int(point[0][2]) if point else 0
-            start_position = [sp for sp in start_positions if sp[1] == driver]
-            start_position = int(start_position[0][0]) if start_position and start_position[0][0] else None
-            finish_position = j+1
-            positions[driver].append(finish_position)
-            result = []
-            result.extend([
+        total_result = []
+        race_result = get_race_results_by_uri(uri, source)
+        for result in race_result:
+            positions[result.driver].append(result.finish_position)
+            track = tracks[i]
+            average_finish_position = sum(positions[result.driver]) / len(positions[result.driver])
+            try:
+                average_finish_position_prev = sum(positions[result.driver][:-1]) / len(positions[result.driver][:-1])
+            except ZeroDivisionError:
+                average_finish_position_prev = 0
+            total_result.append(RaceData(*[
                 i+1,
                 year,
-                tracks[i],
-                driver,
-                finish_position,
-                start_position,
-                sum(positions[driver]) / len(positions[driver]),  # Средняя позиция в гонке
-                average_speed,
-                diff_leader_speed,
-                diff_prev_speed,
-                team,
-                weather,
-                int(retire_lap) if retire_lap else int(laps[i]),
-                point,
+                track if track not in TRACKS_MAPPING else TRACKS_MAPPING[track],
+                result.driver,
+                result.finish_position,
+                result.start_position,
+                average_finish_position,       # Средняя позиция в гонке на текущий момент
+                average_finish_position_prev,  # Средняя позиция в гонке на момент предыдущей гонки
+                result.average_speed,
+                result.diff_leader_speed,
+                result.diff_prev_speed,
+                result.team,
+                result.weather,
+                result.retire_lap if result.retire_lap else laps[i],
+                result.points,
+            ]))
+        all_race_results.append(total_result)
+    return merge_race_results_with_prev(all_race_results, year, source=source)
+
+
+def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
+    """
+    Объединяет результаты для каждой гонки чемпионата с предыдущей 
+    (если эта первая гонка, то берем результаты последней за прошлый год)
+    :param all_race_results: Результаты всех гонок чемпионата
+    :param year: Год проведения чемпионата
+    :param source: Источник данных
+    :return: list
+    """
+    merged_all_race_results = []
+    for idx, result in enumerate(all_race_results):
+        if idx == 0:
+            catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year-1])
+            uris = PARSERS[source]['race_catalog'](catalog_data).links()
+            prev_result = get_race_results_by_uri(uris[-1], source=source)
+        else:
+            prev_result = all_race_results[idx-1]
+        for row1 in result:
+            finish_position_prev = None
+            start_position_prev = None
+            average_speed_prev = None
+            diff_leader_speed_prev = None
+            diff_prev_speed_prev = None
+            weather_prev = None
+            team_prev = None
+            for row2 in prev_result:
+                if row1.driver == row2.driver:
+                    finish_position_prev = row2.finish_position
+                    start_position_prev = row2.start_position
+                    average_speed_prev = row2.average_speed
+                    diff_leader_speed_prev = row2.diff_leader_speed
+                    diff_prev_speed_prev = row2.diff_prev_speed
+                    weather_prev = row2.weather
+                    team_prev = row2.team
+            merged_all_race_results.append([
+                row1.number,
+                row1.year,
+                row1.track,
+                row1.laps,
+                row1.points,
+                row1.driver,
+                row1.finish_position,
+                row1.start_position,
+                row1.average_finish_position,
+                row1.average_speed,
+                row1.diff_leader_speed,
+                row1.diff_prev_speed,
+                row1.team,
+                row1.weather,
+                finish_position_prev,
+                start_position_prev,
+                row1.average_finish_position_prev,
+                average_speed_prev,
+                diff_leader_speed_prev,
+                diff_prev_speed_prev,
+                team_prev,
+                weather_prev,
             ])
-            total.append(result)
-        race_results.extend(total)
-    return race_results
+    return merged_all_race_results
 
 
 def load_race_results_by_uri(uri, source='f1news.ru'):
+    """
+    Загружает результаты гонки по заданному uri и инициализирует соответсвующий парсер
+    :param uri: Uri
+    :param source: Источник данных
+    :return: Parser
+    """
     data = scrape_data(source, uri)
-    return F1NewsRaceResultParser(data)
+    return PARSERS[source]['race_results'](data)
 
 
 def load_race_starting_positions_by_uri(uri, source='f1news.ru'):
+    """
+    Загружает результаты квалификации по заданному uri и инициализирует соответсвующий парсер
+    :param uri: Uri
+    :param source: Источник данных
+    :return: Parser
+    """
     data = scrape_data(source, uri)
-    return F1NewsRaceStartingPositionsParser(data)
+    return PARSERS[source]['race_starting_positions'](data)
 
 
-def get_team_points(year, source='f1news.ru'):
-    data = scrape_data(source, TEAM_POINTS_URI[source][year])
-    parser = F1NewsTeamPointsParser(data)
-    return parser.points()
+# --------------------------------------------- Data Sets Builders Block --------------------------------------------- #
 
 
 def build_testing_data_sets(year):
-    results_df = pd.DataFrame(get_testing_results(year), columns=TESTING_RESULTS_HEADERS)
+    """
+    Строит датафрейм на основе результатов тестов
+    :param year: Год проведения чемпионата
+    :return: pandas.DataFrame
+    """
+    df = pd.DataFrame(get_testing_results(year), columns=TESTING_RESULTS_HEADERS)
     if year != 2018:
         points_df = pd.DataFrame(get_team_points(year), columns=TEAM_POINTS_HEADERS)[['team', 'points']]
         points_df['points'] = points_df['points'].astype(float)
-        results_df = results_df.merge(points_df, on='team').sort_values(['day', 'time', 'points'])
-    return results_df
+        df = df.merge(points_df, on='team').sort_values(['day', 'time', 'points'])
+    return df
 
 
 def build_racing_data_sets(year):
-    return pd.DataFrame(get_race_results(year), columns=RACING_RESULTS_HEADERS)
+    """
+    Строит датафрейм на основе результатов гонок
+    :param year: Год проведения чемпионата
+    :return: pandas.DataFrame
+    """
+    return pd.DataFrame(get_all_race_results(year), columns=RACING_RESULTS_HEADERS)
 
 
 def build_team_data_sets(year):
+    """
+    Строит датафрейм на основе дополнительной информации о командах
+    :param year: Год проведения чемпионата
+    :return: pandas.DataFrame
+    """
     df = pd.DataFrame(list(TEAMS_ADDITIONAL_DATA[year]), columns=TEAMS_DATA_HEADERS)
     df['year'] = year
     return df
 
 
 def save_data_frame_as_csv(df, period, prefix):
+    """
+    Сохраняет датафрейм в виде csv файла
+    :param df: pandas.DataFrame
+    :param period: Период времени в годах [2014, 2017]
+    :param prefix: Префикс имени файла
+    """
     if len(period) > 1:
         path = '{}-data-{}-{}.csv'.format(prefix, period[0], period[-1])
     else:
         path = '{}-data-{}.csv'.format(prefix, period[0])
     full_path = os.path.join(settings.STORAGE_PATH, path)
     df.to_csv(full_path, encoding='utf-8', index=False)
+
+
+# ---------------------------------------------------- Main Block ---------------------------------------------------- #
 
 
 def main():
