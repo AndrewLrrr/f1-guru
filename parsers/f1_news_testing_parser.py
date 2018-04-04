@@ -67,7 +67,7 @@ class F1NewsTestingParser(Parser):
             return None
         if item.startswith('+'):
             item = item.replace('+', '')
-        return item.replace(':', '.')
+        return item.replace(':', '.').replace('\'', '.').replace('"', '.')
 
     @staticmethod
     def _normalize_lap_times(results):

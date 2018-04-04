@@ -667,16 +667,23 @@ def main():
         modes = ('testing', 'racing', 'team',)
 
     try:
-        current_year = int(sys.argv[2])
-        if current_year < YEARS_PERIOD[0] or current_year > YEARS_PERIOD[-1]:
+        start_period = int(sys.argv[2])
+        if start_period < YEARS_PERIOD[0] or start_period > YEARS_PERIOD[-1]:
             raise ValueError('Year should be between {} and {}'.format(YEARS_PERIOD[0], YEARS_PERIOD[-1]))
     except IndexError:
-        current_year = None
+        start_period = None
 
-    if not current_year:
-        period = YEARS_PERIOD[:-1]  # 2018 год не добавляем в выборку
+    if not start_period:
+        period = YEARS_PERIOD[:-1]  # 2018 год не добавляем в выборку по умолчанию
     else:
-        period = [current_year]
+        period = [start_period]
+        try:
+            finish_period = int(sys.argv[3])
+            if start_period < YEARS_PERIOD[0] or start_period > YEARS_PERIOD[-1]:
+                raise ValueError('Year should be between {} and {}'.format(YEARS_PERIOD[0], YEARS_PERIOD[-1]))
+            period = range(start_period, finish_period+1)
+        except IndexError:
+            pass
 
     for mode in modes:
         df = None
