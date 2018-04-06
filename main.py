@@ -7,6 +7,7 @@ import pandas as pd
 
 import settings
 from decorators import decorators
+from exceptions.exceptions import RaceCatalogException
 from helpers.scraper import ProxyScraper, Scraper
 from parsers.f1_news_race_calatog_parser import F1NewsRaceCatalogParser
 from parsers.f1_news_race_result_parser import F1NewsRaceResultParser
@@ -85,6 +86,31 @@ WEATHER_MAPPING = {
     'Дождь, в конце сухо': 'changeable',
 }
 
+DRIVER_TEAM_MAPPING = {
+    2018: {
+        'Алонсо': 'McLaren',
+        'Боттас': 'Mercedes',
+        'Бьянки': 'Sauber',
+        'Вандорн': 'McLaren',
+        'Гасли': 'Toro Rosso',
+        'Грожан': 'Haas',
+        'Магнуссен': 'Haas',
+        'Окон': 'Force India',
+        'Перес': 'Force India',
+        'Райкконен': 'Ferrari',
+        'Риккардо': 'Red Bull',
+        'Сайнс': 'Renault',
+        'Сироткин': 'Williams',
+        'Стролл': 'Williams',
+        'Ферстаппен': 'Red Bull',
+        'Феттель': 'Ferrari',
+        'Хартли': 'Toro Rosso',
+        'Хэмилтон': 'Mercedes',
+        'Хюлкенберг': 'Renault',
+        'Эриксон': 'Sauber',
+    }
+}
+
 # Дополнительные данные будем записывать в формате:
 # Двигатель, Руководитель, Тех.директор, Бюджет (в млн евро), Официальная поддержка от моториста
 TEAMS_ADDITIONAL_DATA = {
@@ -145,8 +171,8 @@ TEAMS_ADDITIONAL_DATA = {
         ('Williams', 'Mercedes', 'Клэр Уильямс', 'Падди Лоу', 135, 0),
         ('Force India', 'Mercedes', 'Роберт Фернли', 'Энди Грин', 110, 0),
         ('Toro Rosso', 'Honda', 'Франц Тост', 'Джеймс Ки', 125, 1),
-        ('Renault', 'Renault', 'Сирил Абитебул', 'Ник Честер', 200, 0),
-        ('McLaren', 'Renault', 'Эрик Булье', 'Тим Госс', 250, 1),
+        ('Renault', 'Renault', 'Сирил Абитебул', 'Ник Честер', 200, 1),
+        ('McLaren', 'Renault', 'Эрик Булье', 'Тим Госс', 250, 0),
         ('Sauber', 'Ferrari', 'Мониша Кальтенборн', 'Йорг Цандер', 135, 0),
         ('Haas', 'Ferrari', 'Гюнтер Штайнер', 'Роб Тэйлор', 110, 0),
     ),
@@ -224,6 +250,37 @@ RACING_RESULTS_HEADERS = (
     'finish_position_prev',
     'start_position_prev',
     'average_finish_position_prev',
+    'average_speed_prev',
+    'lag_from_the_leader_prev',
+    'lag_from_the_next_prev',
+    'team_prev',
+    'weather_prev',
+)
+
+RACE_RESULT_HEADERS = (
+    'number',
+    'year',
+    'track',
+    'driver',
+    'team',
+    'finish_position',
+    'start_position',
+    'average_speed',
+    'lag_from_the_leader',
+    'lag_from_the_next',
+    'retire_lap',
+    'points',
+    'weather',
+)
+
+BLANK_RACE_RESULT_HEADERS = (
+    'number',
+    'year',
+    'track',
+    'driver',
+    'team',
+    'finish_position_prev',
+    'start_position_prev',
     'average_speed_prev',
     'lag_from_the_leader_prev',
     'lag_from_the_next_prev',
@@ -436,6 +493,80 @@ def get_race_results_by_uri(uri, source='f1news.ru'):
     return race_results
 
 
+def get_race_results_by_num(year, num, source='f1news.ru'):
+    """
+    Собирает результаты гонки по номеру этапа в календаре, парсит и формирует заданный результат
+    :param year: Год проведения чемпионата
+    :param num: Порядковый номер этапа в календаре чемпионата
+    :param source: Источник данных
+    :return: list
+    """
+    catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year])
+    parser = PARSERS[source]['race_catalog'](catalog_data)
+    race_data = []
+    try:
+        uri = parser.links()[num-1]
+        track = TRACKS_MAPPING[parser.tracks()[num-1]]
+        race_results = get_race_results_by_uri(uri, source=source)
+        for result in race_results:
+            race_data.append([
+                num,
+                year,
+                track,
+                result.driver,
+                result.team,
+                result.finish_position,
+                result.start_position,
+                result.average_speed,
+                result.diff_leader_speed,
+                result.diff_prev_speed,
+                result.retire_lap,
+                result.points,
+                result.weather,
+            ])
+    except (KeyError, IndexError):
+        raise RaceCatalogException()
+    return race_data
+
+
+def get_blank_race_results(year, num, source='f1news.ru'):
+    """
+    Собирает результаты предыдущей гонки и необходимые данные по предстоящей гонке
+    :param year: Год проведения чемпионата
+    :param num: Порядковый номер этапа в календаре чемпионата
+    :param source: Источник данных
+    :return: list
+    """
+    catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year])
+    parser = PARSERS[source]['race_catalog'](catalog_data)
+    track = TRACKS_MAPPING[parser.tracks()[num-1]]
+    if num == 1:
+        prev_catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year-1])
+        prev_parser = PARSERS[source]['race_catalog'](prev_catalog_data)
+        uri = prev_parser.links()[-1]
+    else:
+        uri = parser.links()[num-2]
+    prev_race_results = get_race_results_by_uri(uri, source=source)
+    race_data = []
+    for driver, team in DRIVER_TEAM_MAPPING[year].items():
+        res = get_prev_race_results_for_driver_and_team(driver, team, prev_race_results)
+        race_data.append([
+            num,
+            year,
+            track,
+            driver,
+            team,
+            res.finish_position,
+            res.start_position,
+            res.average_speed,
+            res.diff_leader_speed,
+            res.diff_prev_speed,
+            res.team,
+            res.weather,
+        ])
+    return race_data
+
+
 def get_all_race_results(year, source='f1news.ru'):
     """
     Собирает результаты всех гонок за сезон, считает дополнительные статистики
@@ -502,6 +633,74 @@ def get_all_race_results(year, source='f1news.ru'):
     return merge_race_results_with_prev(all_race_results, year, source=source)
 
 
+def get_prev_race_results_for_driver_and_team(driver, team, prev_race_results):
+    RaceData = namedtuple(
+        'RaceData',
+        [
+            'finish_position',
+            'start_position',
+            'average_speed',
+            'diff_leader_speed',
+            'diff_prev_speed',
+            'weather',
+            'team',
+            'retire_lap',
+            'points',
+        ]
+    )
+    # TODO: Данная логика не учитывает появление новой команды в чемпионате, в текущем (2018) году таких
+    # TODO: команд нет, но если такие появятся в будущем, подумать, что с этим можно сделать.
+    # Устанавливаем значения по умолчанию
+    driver_has_been_found = False
+    finish_position = None
+    start_position = None
+    average_speed = None
+    diff_leader_speed = None
+    diff_prev_speed = None
+    weather = None
+    team_prev = None
+    retire_lap = None
+    points = 0
+    # Сначала ищем совпадения по имени гонщика
+    for row in prev_race_results:
+        if driver == row.driver:
+            driver_has_been_found = True
+            finish_position = row.finish_position
+            start_position = row.start_position
+            average_speed = row.average_speed
+            diff_leader_speed = row.diff_leader_speed
+            diff_prev_speed = row.diff_prev_speed
+            weather = row.weather
+            team_prev = row.team
+            retire_lap = row.retire_lap
+            points = row.points
+    # Если по имени гонщика ничего не найдено, то скорее всего этот гонщик дебютант чемпионата,
+    # поэтому ищем совпадения по названию команды
+    if not driver_has_been_found:
+        for row in prev_race_results:
+            if team == row.team and driver != row.driver:
+                finish_position = row.finish_position
+                start_position = row.start_position
+                average_speed = row.average_speed
+                diff_leader_speed = row.diff_leader_speed
+                diff_prev_speed = row.diff_prev_speed
+                weather = row.weather
+                team_prev = row.team
+                retire_lap = row.retire_lap
+                points = row.points
+    return RaceData(
+        finish_position,
+        start_position,
+        average_speed,
+        diff_leader_speed,
+        diff_prev_speed,
+        weather,
+        team_prev,
+        retire_lap,
+        points,
+    )
+
+
 def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
     """
     Объединяет результаты для каждой гонки чемпионата с предыдущей 
@@ -516,67 +715,34 @@ def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
         if idx == 0:
             catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year-1])
             uris = PARSERS[source]['race_catalog'](catalog_data).links()
-            prev_result = get_race_results_by_uri(uris[-1], source=source)
+            prev_res = get_race_results_by_uri(uris[-1], source=source)
         else:
-            prev_result = all_race_results[idx-1]
-        for row1 in result:
-            # Устанавливаем значения по умолчанию
-            driver_has_been_found = False
-            finish_position_prev = None
-            start_position_prev = None
-            average_speed_prev = None
-            diff_leader_speed_prev = None
-            diff_prev_speed_prev = None
-            weather_prev = None
-            team_prev = None
-            # Сначала ищем совпадения по имени гонщика
-            for row2 in prev_result:
-                if row1.driver == row2.driver:
-                    driver_has_been_found = True
-                    finish_position_prev = row2.finish_position
-                    start_position_prev = row2.start_position
-                    average_speed_prev = row2.average_speed
-                    diff_leader_speed_prev = row2.diff_leader_speed
-                    diff_prev_speed_prev = row2.diff_prev_speed
-                    weather_prev = row2.weather
-                    team_prev = row2.team
-            # Если по имени гонщика ничего не найдено, то скорее всего этот гонщик дебютант чемпионата,
-            # поэтому ищем совпадения по названию команды
-            if not driver_has_been_found:
-                for row2 in prev_result:
-                    if row1.team == row2.team and row1.driver != row2.driver:
-                        finish_position_prev = row2.finish_position
-                        start_position_prev = row2.start_position
-                        average_speed_prev = row2.average_speed
-                        diff_leader_speed_prev = row2.diff_leader_speed
-                        diff_prev_speed_prev = row2.diff_prev_speed
-                        weather_prev = row2.weather
-                        team_prev = row2.team
-            # TODO: Данная логика не учитывает появление новой команды в чемпионате, в текущем (2018) году таких
-            # TODO: команд нет, но если такие появятся в будущем, подумать, что с этим можно сделать.
+            prev_res = all_race_results[idx-1]
+        for res in result:
+            prev = get_prev_race_results_for_driver_and_team(res.driver, res.team, prev_res)
             merged_all_race_results.append([
-                row1.number,
-                row1.year,
-                row1.track,
-                row1.laps,
-                row1.points,
-                row1.driver,
-                row1.finish_position,
-                row1.start_position,
-                row1.average_finish_position,
-                row1.average_speed,
-                row1.diff_leader_speed,
-                row1.diff_prev_speed,
-                row1.team,
-                row1.weather,
-                finish_position_prev,
-                start_position_prev,
-                row1.average_finish_position_prev,
-                average_speed_prev,
-                diff_leader_speed_prev,
-                diff_prev_speed_prev,
-                team_prev,
-                weather_prev,
+                res.number,
+                res.year,
+                res.track,
+                res.laps,
+                res.points,
+                res.driver,
+                res.finish_position,
+                res.start_position,
+                res.average_finish_position,
+                res.average_speed,
+                res.diff_leader_speed,
+                res.diff_prev_speed,
+                res.team,
+                res.weather,
+                prev.finish_position,
+                prev.start_position,
+                res.average_finish_position_prev,
+                prev.average_speed,
+                prev.diff_leader_speed,
+                prev.diff_prev_speed,
+                prev.team,
+                prev.weather,
             ])
     return merged_all_race_results
 
@@ -629,6 +795,26 @@ def build_racing_data_sets(year):
     return pd.DataFrame(get_all_race_results(year), columns=RACING_RESULTS_HEADERS)
 
 
+def build_race_result_data_set(year, num):
+    """
+    Строит датафрейм по результатам гонки
+    :param year: Год проведения чемпионата
+    :param num: Порядковый номер этапа в календаре чемпионата
+    :return: pandas.DataFrame
+    """
+    return pd.DataFrame(get_race_results_by_num(year, num), columns=RACE_RESULT_HEADERS)
+
+
+def build_race_blank_data_set(year, num):
+    """
+    Строит датафрейм со всеми необходиыми признаками для предстоящей гонки
+    :param year: Год проведения чемпионата
+    :param num: Порядковый номер этапа в календаре чемпионата
+    :return: pandas.DataFrame
+    """
+    return pd.DataFrame(get_blank_race_results(year, num), columns=BLANK_RACE_RESULT_HEADERS)
+
+
 def build_team_data_sets(year):
     """
     Строит датафрейм на основе дополнительной информации о командах
@@ -666,50 +852,65 @@ def main():
     except IndexError:
         modes = ('testing', 'racing', 'team',)
 
-    try:
-        start_period = int(sys.argv[2])
-        if start_period < YEARS_PERIOD[0] or start_period > YEARS_PERIOD[-1]:
-            raise ValueError('Year should be between {} and {}'.format(YEARS_PERIOD[0], YEARS_PERIOD[-1]))
-    except IndexError:
-        start_period = None
-
-    if not start_period:
-        period = YEARS_PERIOD[:-1]  # 2018 год не добавляем в выборку по умолчанию
-    else:
-        period = [start_period]
+    if {'race-result', 'race-blank'} & set(modes):
+        mode = modes[0]
+        year = int(sys.argv[2])
+        num = int(sys.argv[3])
         try:
-            finish_period = int(sys.argv[3])
+            if mode == 'race-blank':
+                df = build_race_blank_data_set(year, num)
+            elif mode == 'race-result':
+                df = build_race_result_data_set(year, num)
+            else:
+                raise ValueError('Unsupported data set type `{}`'.format(mode))
+            save_data_frame_as_csv(df, [year, num], mode)
+        except RaceCatalogException:
+            logger.error('There are no available results for race {} in the year {} yet'.format(num, year))
+    else:
+        try:
+            start_period = int(sys.argv[2])
             if start_period < YEARS_PERIOD[0] or start_period > YEARS_PERIOD[-1]:
                 raise ValueError('Year should be between {} and {}'.format(YEARS_PERIOD[0], YEARS_PERIOD[-1]))
-            period = range(start_period, finish_period+1)
         except IndexError:
-            pass
+            start_period = None
 
-    for mode in modes:
-        df = None
-        if mode == 'testing':
-            for year in period:
-                if df is None:
-                    df = build_testing_data_sets(year)
-                else:
-                    df = pd.concat([df, build_testing_data_sets(year)])
-            save_data_frame_as_csv(df, period, 'testing')
-        elif mode == 'racing':
-            for year in period:
-                if df is None:
-                    df = build_racing_data_sets(year)
-                else:
-                    df = pd.concat([df, build_racing_data_sets(year)])
-            save_data_frame_as_csv(df, period, 'racing')
-        elif mode == 'team':
-            for year in period:
-                if df is None:
-                    df = build_team_data_sets(year)
-                else:
-                    df = pd.concat([df, build_team_data_sets(year)])
-            save_data_frame_as_csv(df, period, 'team')
+        if not start_period:
+            period = YEARS_PERIOD[:-1]  # 2018 год не добавляем в выборку по умолчанию
         else:
-            raise ValueError('Unsupported data set type `{}`'.format(mode))
+            period = [start_period]
+            try:
+                finish_period = int(sys.argv[3])
+                if start_period < YEARS_PERIOD[0] or start_period > YEARS_PERIOD[-1]:
+                    raise ValueError('Year should be between {} and {}'.format(YEARS_PERIOD[0], YEARS_PERIOD[-1]))
+                period = range(start_period, finish_period+1)
+            except IndexError:
+                pass
+
+        for mode in modes:
+            df = None
+            if mode == 'testing':
+                for year in period:
+                    if df is None:
+                        df = build_testing_data_sets(year)
+                    else:
+                        df = pd.concat([df, build_testing_data_sets(year)])
+                save_data_frame_as_csv(df, period, 'testing')
+            elif mode == 'racing':
+                for year in period:
+                    if df is None:
+                        df = build_racing_data_sets(year)
+                    else:
+                        df = pd.concat([df, build_racing_data_sets(year)])
+                save_data_frame_as_csv(df, period, 'racing')
+            elif mode == 'team':
+                for year in period:
+                    if df is None:
+                        df = build_team_data_sets(year)
+                    else:
+                        df = pd.concat([df, build_team_data_sets(year)])
+                save_data_frame_as_csv(df, period, 'team')
+            else:
+                raise ValueError('Unsupported data set type `{}`'.format(mode))
 
     logger.info('Finish building data set')
 

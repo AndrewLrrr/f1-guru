@@ -8,7 +8,9 @@ class F1NewsRaceCatalogParser(Parser):
         rows = table.find_all('tr', {'class': ['lineOne', 'lineTwo']})
         for row in rows:
             row = row.find_all('td')
-            results.append(row[2].find('a', href=True)['href'])
+            link = row[2].find('a', href=True)
+            if link:
+                results.append(row[2].find('a', href=True)['href'])
         return tuple(results)
 
     def tracks(self):
