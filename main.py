@@ -90,11 +90,11 @@ DRIVER_TEAM_MAPPING = {
     2018: {
         'Алонсо': 'McLaren',
         'Боттас': 'Mercedes',
-        'Бьянки': 'Sauber',
         'Вандорн': 'McLaren',
         'Гасли': 'Toro Rosso',
         'Грожан': 'Haas',
         'Магнуссен': 'Haas',
+        'Леклер': 'Sauber',
         'Окон': 'Force India',
         'Перес': 'Force India',
         'Райкконен': 'Ferrari',
@@ -506,7 +506,8 @@ def get_race_results_by_num(year, num, source='f1news.ru'):
     race_data = []
     try:
         uri = parser.links()[num-1]
-        track = TRACKS_MAPPING[parser.tracks()[num-1]]
+        track = parser.tracks()[num-1]
+        track = track if track not in TRACKS_MAPPING else TRACKS_MAPPING[track]
         race_results = get_race_results_by_uri(uri, source=source)
         for result in race_results:
             race_data.append([
@@ -539,7 +540,8 @@ def get_blank_race_results(year, num, source='f1news.ru'):
     """
     catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year])
     parser = PARSERS[source]['race_catalog'](catalog_data)
-    track = TRACKS_MAPPING[parser.tracks()[num-1]]
+    track = parser.tracks()[num-1]
+    track = track if track not in TRACKS_MAPPING else TRACKS_MAPPING[track]
     if num == 1:
         prev_catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year-1])
         prev_parser = PARSERS[source]['race_catalog'](prev_catalog_data)
@@ -549,7 +551,7 @@ def get_blank_race_results(year, num, source='f1news.ru'):
     prev_race_results = get_race_results_by_uri(uri, source=source)
     race_data = []
     for driver, team in DRIVER_TEAM_MAPPING[year].items():
-        res = get_prev_race_results_for_driver_and_team(driver, team, prev_race_results)
+        res = get_race_results_for_driver_and_team(driver, team, prev_race_results)
         race_data.append([
             num,
             year,
@@ -633,7 +635,14 @@ def get_all_race_results(year, source='f1news.ru'):
     return merge_race_results_with_prev(all_race_results, year, source=source)
 
 
-def get_prev_race_results_for_driver_and_team(driver, team, prev_race_results):
+def get_race_results_for_driver_and_team(driver, team, race_results):
+    """
+    Ищет и возвращает результаты гонки для конкретного гонщика или команды (если поиск по гонщику не дал результатов)
+    :param driver: Имя гонщика
+    :param team: Название команды
+    :param race_results: Результаты гонки
+    :return: tuple
+    """
     RaceData = namedtuple(
         'RaceData',
         [
@@ -662,7 +671,7 @@ def get_prev_race_results_for_driver_and_team(driver, team, prev_race_results):
     retire_lap = None
     points = 0
     # Сначала ищем совпадения по имени гонщика
-    for row in prev_race_results:
+    for row in race_results:
         if driver == row.driver:
             driver_has_been_found = True
             finish_position = row.finish_position
@@ -677,7 +686,7 @@ def get_prev_race_results_for_driver_and_team(driver, team, prev_race_results):
     # Если по имени гонщика ничего не найдено, то скорее всего этот гонщик дебютант чемпионата,
     # поэтому ищем совпадения по названию команды
     if not driver_has_been_found:
-        for row in prev_race_results:
+        for row in race_results:
             if team == row.team and driver != row.driver:
                 finish_position = row.finish_position
                 start_position = row.start_position
@@ -719,7 +728,7 @@ def merge_race_results_with_prev(all_race_results, year, source='f1news.ru'):
         else:
             prev_res = all_race_results[idx-1]
         for res in result:
-            prev = get_prev_race_results_for_driver_and_team(res.driver, res.team, prev_res)
+            prev = get_race_results_for_driver_and_team(res.driver, res.team, prev_res)
             merged_all_race_results.append([
                 res.number,
                 res.year,
