@@ -593,6 +593,7 @@ def get_all_race_results(year, source='f1news.ru'):
             'team',
             'weather',
             'laps',
+            'retire_lap',
             'points',
         ]
     )
@@ -629,6 +630,7 @@ def get_all_race_results(year, source='f1news.ru'):
                 result.team,
                 result.weather,
                 result.retire_lap if result.retire_lap else laps[i],
+                result.retire_lap,
                 result.points,
             ]))
         all_race_results.append(total_result)
