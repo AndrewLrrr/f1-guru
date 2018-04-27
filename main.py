@@ -15,7 +15,7 @@ from parsers.f1_news_race_starting_positions_parser import F1NewsRaceStartingPos
 from parsers.f1_news_team_points_parser import F1NewsTeamPointsParser
 from parsers.f1_news_testing_parser import F1NewsTestingParser
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -295,9 +295,52 @@ TEAMS_DATA_HEADERS = ('team', 'engine', 'team_leader', 'technical_director', 'bu
 TEAM_POINTS_HEADERS = ('position', 'team', 'points')
 
 
+# ----------------------------------------------- Race Objects Block ------------------------------------------------- #
+
+
+RaceData = namedtuple(
+    'RaceData',
+    [
+        'driver',
+        'finish_position',
+        'start_position',
+        'average_speed',
+        'diff_leader_speed',
+        'diff_prev_speed',
+        'retire_lap',
+        'points',
+        'team',
+        'weather',
+    ]
+)
+
+RaceDataFull = namedtuple(
+    'RaceData',
+    [
+        'driver',
+        'finish_position',
+        'start_position',
+        'average_speed',
+        'diff_leader_speed',
+        'diff_prev_speed',
+        'retire_lap',
+        'points',
+        'team',
+        'weather',
+        'number',
+        'year',
+        'track',
+        'average_finish_position',
+        'average_finish_position_prev',
+        'laps',
+    ]
+)
+
+
 # -------------------------------------------------- Helpers Block --------------------------------------------------- #
 
-
+# TODO: С этой логикой есть определенные проблемы, так как для некоторых страниц кеширование нежелательно
+# TODO: Подумать как лучше сделать отключение кеширования по требованию
 @decorators.save_to_cache('scraped_data')
 def scrape_data(scraper_code, uri, params=None, headers=None):
     """
@@ -428,21 +471,6 @@ def get_race_results_by_uri(uri, source='f1news.ru'):
     :return: list
     """
     race_results = []
-    RaceData = namedtuple(
-        'RaceData',
-        [
-            'driver',
-            'finish_position',
-            'start_position',
-            'average_speed',
-            'diff_leader_speed',
-            'diff_prev_speed',
-            'retire_lap',
-            'points',
-            'team',
-            'weather',
-        ]
-    )
     start_positions_uri = uri.replace('race.shtml', 'grid.shtml')
     race_parser = load_race_results_by_uri(uri, source=source)
     start_positions_parser = load_race_starting_positions_by_uri(start_positions_uri, source=source)
@@ -576,27 +604,6 @@ def get_all_race_results(year, source='f1news.ru'):
     :param source: Источник данных
     :return: list
     """
-    RaceData = namedtuple(
-        'RaceData',
-        [
-            'number',
-            'year',
-            'track',
-            'driver',
-            'finish_position',
-            'start_position',
-            'average_finish_position',
-            'average_finish_position_prev',
-            'average_speed',
-            'diff_leader_speed',
-            'diff_prev_speed',
-            'team',
-            'weather',
-            'laps',
-            'retire_lap',
-            'points',
-        ]
-    )
     all_race_results = []
     catalog_data = scrape_data(source, RACING_CATALOGS_URI[source][year])
     parser = PARSERS[source]['race_catalog'](catalog_data)
@@ -615,23 +622,23 @@ def get_all_race_results(year, source='f1news.ru'):
                 average_finish_position_prev = sum(positions[result.driver][:-1]) / len(positions[result.driver][:-1])
             except ZeroDivisionError:
                 average_finish_position_prev = 0
-            total_result.append(RaceData(*[
-                i+1,
-                year,
-                track if track not in TRACKS_MAPPING else TRACKS_MAPPING[track],
+            total_result.append(RaceDataFull(*[
                 result.driver,
                 result.finish_position,
                 result.start_position,
-                average_finish_position,       # Средняя позиция в гонке на текущий момент
-                average_finish_position_prev,  # Средняя позиция в гонке на момент предыдущей гонки
                 result.average_speed,
                 result.diff_leader_speed,
                 result.diff_prev_speed,
-                result.team,
-                result.weather,
-                result.retire_lap if result.retire_lap else laps[i],
                 result.retire_lap,
                 result.points,
+                result.team,
+                result.weather,
+                i + 1,
+                year,
+                track if track not in TRACKS_MAPPING else TRACKS_MAPPING[track],
+                average_finish_position,  # Средняя позиция в гонке на текущий момент
+                average_finish_position_prev,  # Средняя позиция в гонке на момент предыдущей гонки
+                result.retire_lap if result.retire_lap else laps[i],
             ]))
         all_race_results.append(total_result)
     return merge_race_results_with_prev(all_race_results, year, source=source)
@@ -645,20 +652,6 @@ def get_race_results_for_driver_and_team(driver, team, race_results):
     :param race_results: Результаты гонки
     :return: tuple
     """
-    RaceData = namedtuple(
-        'RaceData',
-        [
-            'finish_position',
-            'start_position',
-            'average_speed',
-            'diff_leader_speed',
-            'diff_prev_speed',
-            'weather',
-            'team',
-            'retire_lap',
-            'points',
-        ]
-    )
     # TODO: Данная логика не учитывает появление новой команды в чемпионате, в текущем (2018) году таких
     # TODO: команд нет, но если такие появятся в будущем, подумать, что с этим можно сделать.
     # Устанавливаем значения по умолчанию
@@ -700,15 +693,16 @@ def get_race_results_for_driver_and_team(driver, team, race_results):
                 retire_lap = row.retire_lap
                 points = row.points
     return RaceData(
+        driver,
         finish_position,
         start_position,
         average_speed,
         diff_leader_speed,
         diff_prev_speed,
-        weather,
-        team_prev,
         retire_lap,
         points,
+        team_prev,
+        weather,
     )
 
 
